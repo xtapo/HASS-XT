@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HASS-XT Vision - Home Assistant AI Camera</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="navbar">
+            <div class="logo-group">
+                <div class="logo-icon">👁️</div>
+                <div>
+                    <h1>HASS-XT Vision</h1>
+                    <span class="subtitle">Home Assistant AI Motion Dashboard</span>
+                </div>
+            </div>
+            <div class="status-group">
+                <div id="mqtt-badge" class="badge badge-disconnected">MQTT: Disconnected</div>
+                <div id="fps-badge" class="badge badge-info">FPS: --</div>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Column: Video Feed -->
+            <section class="card video-card">
+                <div class="card-header">
+                    <h2>Luồng Camera Trực Tiếp (Live Stream)</h2>
+                    <span id="motion-badge" class="badge badge-clear">KÍNH TRONG</span>
+                </div>
+                <div class="video-container">
+                    <img id="live-stream" src="/api/stream" alt="Live Camera Stream" />
+                    <div class="video-overlay">
+                        <span id="overlay-status">AI Object Detection Active</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Telemetry & Controls -->
+            <section class="sidebar-column">
+                <!-- Telemetry Card -->
+                <div class="card telemetry-card">
+                    <div class="card-header">
+                        <h2>Vật thể ghi nhận (AI Detections)</h2>
+                    </div>
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-value" id="count-value">0</span>
+                            <span class="metric-label">Số vật thể</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-value" id="person-status">Không</span>
+                            <span class="metric-label">Phát hiện Người</span>
+                        </div>
+                    </div>
+                    <div id="detections-list" class="detections-list">
+                        <p class="empty-msg">Chưa phát hiện chuyển động nào...</p>
+                    </div>
+                </div>
+
+                <!-- Configuration Card -->
+                <div class="card config-card">
+                    <div class="card-header">
+                        <h2>Cấu hình AI & Độ nhạy</h2>
+                    </div>
+                    <form id="config-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="sensitivity-input">Độ nhạy chuyển động (Motion Threshold): <span id="sensitivity-val">25</span></label>
+                            <input type="range" id="sensitivity-input" min="5" max="100" value="25">
+                        </div>
+                        <div class="form-group">
+                            <label for="confidence-input">Ngưỡng tin cậy AI (Confidence): <span id="confidence-val">0.50</span></label>
+                            <input type="range" id="confidence-input" min="0.1" max="0.9" step="0.05" value="0.5">
+                        </div>
+                        <button id="save-btn" class="btn btn-primary">Lưu cấu hình</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
