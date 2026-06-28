@@ -4,9 +4,13 @@ FROM ${BUILD_FROM}
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for OpenCV
+# Install system dependencies required for OpenCV on Debian Bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    python3 \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    libgl1 \
     libglib2.0-0 \
     libgomp1 \
     curl \
@@ -14,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt || pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app /app/app
