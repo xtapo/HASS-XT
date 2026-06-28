@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const liveStream = document.getElementById("live-stream");
     const mqttBadge = document.getElementById("mqtt-badge");
     const fpsBadge = document.getElementById("fps-badge");
     const motionBadge = document.getElementById("motion-badge");
@@ -12,6 +13,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const confidenceVal = document.getElementById("confidence-val");
     const saveBtn = document.getElementById("save-btn");
 
+    function getBaseUrl() {
+        let path = window.location.pathname;
+        if (!path.endsWith('/')) {
+            path += '/';
+        }
+        return path;
+    }
+
+    const baseUrl = getBaseUrl();
+    if (liveStream) {
+        liveStream.src = baseUrl + "api/stream";
+    }
+
     // Dynamic slider label update
     sensitivityInput.addEventListener("input", (e) => {
         sensitivityVal.textContent = e.target.value;
@@ -24,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Load initial config
     async function loadConfig() {
         try {
-            const res = await fetch("/api/config");
+            const res = await fetch(baseUrl + "api/config");
             const data = await res.json();
             sensitivityInput.value = data.motion_sensitivity;
             sensitivityVal.textContent = data.motion_sensitivity;
@@ -42,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 motion_sensitivity: parseInt(sensitivityInput.value),
                 ai_confidence: parseFloat(confidenceInput.value)
             };
-            const res = await fetch("/api/config", {
+            const res = await fetch(baseUrl + "api/config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -57,7 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Poll telemetry status
     async function updateStatus() {
         try {
-            const res = await fetch("/api/status");
+            const res = await fetch(baseUrl + "api/status");
             const data = await res.json();
 
             // MQTT status
