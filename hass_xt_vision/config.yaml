@@ -40,3 +40,4 @@ schema:
   mqtt_password: str?
   motion_sensitivity: int
   ai_confidence: float
+image: "ghcr.io/xtapo/hass_xt_vision-{arch}"
