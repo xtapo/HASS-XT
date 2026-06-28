@@ -2,26 +2,23 @@ name: "HASS-XT AI Vision"
 version: "1.0.0"
 slug: "hass_xt_vision"
 description: "AI Motion Detection & Object Recognition Camera for Home Assistant"
+url: "https://github.com/xtapo/HASS-XT"
 arch:
-  - armhf
-  - armv7
   - aarch64
   - amd64
+  - armhf
+  - armv7
 startup: application
 boot: auto
+init: false
 webui: "http://[HOST]:[PORT]:8000"
 ports:
   8000/tcp: 8000
 ports_description:
   8000/tcp: Web Dashboard UI & Stream
-schema:
-  rtsp_url: str
-  mqtt_host: str
-  mqtt_port: int
-  mqtt_user: str?
-  mqtt_password: str?
-  motion_sensitivity: int
-  ai_confidence: float
+map:
+  - config:rw
+  - share:rw
 options:
   rtsp_url: "rtsp://192.168.1.100:554/stream1"
   mqtt_host: "core-mosquitto"
@@ -30,3 +27,11 @@ options:
   mqtt_password: ""
   motion_sensitivity: 25
   ai_confidence: 0.5
+schema:
+  rtsp_url: str
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_user: str?
+  mqtt_password: str?
+  motion_sensitivity: int
+  ai_confidence: float
