@@ -11,12 +11,17 @@ arch:
 startup: application
 boot: auto
 init: false
-webui: "http://[HOST]:[PORT]:8000"
+homeassistant_api: true
+ingress: true
+ingress_port: 8000
+panel_icon: mdi:camera-iris
+panel_title: "HASS-XT Vision"
 ports:
   8000/tcp: 8000
 ports_description:
   8000/tcp: Web Dashboard UI & Stream
 map:
+  - addon_config:rw
   - config:rw
   - share:rw
 options:
