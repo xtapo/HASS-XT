@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] - 2026-06-29
+
+### Added
+- Tích hợp Bảng cài đặt trực tuyến toàn bộ thông số RTSP và MQTT trực tiếp trên Web UI.
+- Thêm tính năng tự động liên kết MQTT Service Integration (`services: - mqtt:need`).
+- Hiển thị chi tiết lý do trạng thái kết nối MQTT trên thẻ badge Web UI.
+
+### Fixed
+- Khắc phục lỗi luồng video đen trên Home Assistant Ingress bằng cơ chế snapshot polling ~15 FPS.
+- Tự động thay thế ảnh chờ "Connecting..." loại bỏ hoàn toàn lỗi 404 snapshot.
+- Bắt buộc giao thức FFMPEG TCP Transport giúp kết nối camera RTSP cực kỳ ổn định.
+- Tự động fallback kết nối ngầm sang `core-mosquitto` khi chạy dưới dạng HA Add-on.
+
+---
+
 ## [1.1.0] - 2026-06-29
 
 ### Added

@@ -2,8 +2,8 @@
   "rtsp_url": "rtsp://admin:YQKWNY@192.168.88.253:554/H.264",
   "mqtt_host": "192.168.88.6",
   "mqtt_port": 1883,
-  "mqtt_user": "jamid",
-  "mqtt_password": "Mylove@123",
+  "mqtt_user": "nhan",
+  "mqtt_password": "Nmylove@123",
   "motion_sensitivity": 25,
   "ai_confidence": 0.45,
   "device_name": "hass_xt_camera"
