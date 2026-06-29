@@ -12,6 +12,8 @@ startup: application
 boot: auto
 init: false
 homeassistant_api: true
+services:
+  - mqtt:need
 ingress: true
 ingress_port: 8000
 panel_icon: mdi:camera-iris

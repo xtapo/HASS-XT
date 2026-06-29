@@ -18,12 +18,13 @@ class HAMQTTClient:
     def start(self):
         self.stop()
         try:
-            print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: {self.user})...")
-            # Support both paho-mqtt v1.x and v2.x callback API versions with fresh client instance
+            print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: '{self.user}')...")
             client_id = f"hass_xt_{int(time.time())}"
+            
+            # Flexible client initialization supporting all paho-mqtt versions
             try:
                 self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
-            except AttributeError:
+            except Exception:
                 self.client = mqtt.Client(client_id=client_id)
 
             if self.user:
@@ -38,23 +39,28 @@ class HAMQTTClient:
             print(f"[MQTT] Connection setup error: {e}")
             self.connected = False
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None):
+    def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         code = getattr(rc, "value", rc)
+        print(f"[MQTT] Connection callback response code: {code}")
         if code == 0:
             print(f"[MQTT] Successfully connected to MQTT broker at {self.host}!")
             self.connected = True
-            self._publish_discovery_configs()
+            try:
+                self._publish_discovery_configs()
+            except Exception as e:
+                print(f"[MQTT] Error publishing discovery configs: {e}")
         else:
-            print(f"[MQTT] Connection failed to {self.host} with code {code}")
+            print(f"[MQTT] Connection rejected by {self.host} with code {code}")
             self.connected = False
-            # Fallback to internal HA broker if running as HA Add-on and external IP failed
+            # Smart fallback to internal HA broker if running as HA Add-on
             if self.host != "core-mosquitto" and (os.path.exists("/data/options.json") or os.path.exists("/data")):
-                print("[MQTT] Attempting fallback to internal HA broker 'core-mosquitto'...")
+                print("[MQTT] Triggering automatic fallback to internal HA broker 'core-mosquitto'...")
                 self.host = "core-mosquitto"
                 self.start()
 
-    def _on_disconnect(self, client, userdata, rc, properties=None):
-        print(f"[MQTT] Disconnected from MQTT broker (rc: {rc}).")
+    def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
+        code = getattr(rc, "value", rc)
+        print(f"[MQTT] Disconnected from MQTT broker (code: {code}).")
         self.connected = False
 
     def _publish_discovery_configs(self):
