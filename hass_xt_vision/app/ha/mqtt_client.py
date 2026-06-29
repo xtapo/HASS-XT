@@ -12,22 +12,23 @@ class HAMQTTClient:
         self.password = password
         self.device_name = device_name
         self.connected = False
-        
-        # Support both paho-mqtt v1.x and v2.x callback API versions
-        try:
-            self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=f"hass_xt_{int(time.time())}")
-        except AttributeError:
-            self.client = mqtt.Client(client_id=f"hass_xt_{int(time.time())}")
-
-        if self.user and self.password:
-            self.client.username_pw_set(self.user, self.password)
-
-        self.client.on_connect = self._on_connect
-        self.client.on_disconnect = self._on_disconnect
+        self.client = None
 
     def start(self):
         try:
             print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: {self.user})...")
+            # Support both paho-mqtt v1.x and v2.x callback API versions with fresh client instance
+            try:
+                self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=f"hass_xt_{int(time.time())}")
+            except AttributeError:
+                self.client = mqtt.Client(client_id=f"hass_xt_{int(time.time())}")
+
+            if self.user and self.password:
+                self.client.username_pw_set(self.user, self.password)
+
+            self.client.on_connect = self._on_connect
+            self.client.on_disconnect = self._on_disconnect
+
             self.client.connect_async(self.host, self.port, keepalive=60)
             self.client.loop_start()
         except Exception as e:
@@ -42,12 +43,16 @@ class HAMQTTClient:
             self._publish_discovery_configs()
         else:
             print(f"[MQTT] Connection failed with code {code}")
+            self.connected = False
 
     def _on_disconnect(self, client, userdata, rc, properties=None):
         print(f"[MQTT] Disconnected from MQTT broker (rc: {rc}).")
         self.connected = False
 
     def _publish_discovery_configs(self):
+        if not self.client or not self.connected:
+            return
+
         device_info = {
             "identifiers": [self.device_name],
             "name": "HASS-XT AI Camera",
@@ -102,7 +107,7 @@ class HAMQTTClient:
         print("[MQTT] Home Assistant Discovery configurations published.")
 
     def update_states(self, motion_detected: bool, detections: List[Dict[str, Any]], frame=None):
-        if not self.connected:
+        if not self.connected or not self.client:
             return
 
         motion_payload = "ON" if motion_detected else "OFF"
@@ -121,5 +126,10 @@ class HAMQTTClient:
                 self.client.publish(f"hass_xt/{self.device_name}/snapshot", jpeg.tobytes())
 
     def stop(self):
-        self.client.loop_stop()
-        self.client.disconnect()
+        self.connected = False
+        if self.client:
+            try:
+                self.client.loop_stop()
+                self.client.disconnect()
+            except Exception:
+                pass
