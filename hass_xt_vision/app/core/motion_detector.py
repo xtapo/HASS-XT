@@ -3,7 +3,7 @@ import numpy as np
 from typing import Tuple, List
 
 class MotionDetector:
-    def __init__(self, sensitivity: int = 25, min_area: int = 500):
+    def __init__(self, sensitivity: int = 25, min_area: int = 2000):
         self.sensitivity = sensitivity
         self.min_area = min_area
         self.bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=sensitivity, detectShadows=False)
@@ -29,9 +29,11 @@ class MotionDetector:
         motion_boxes = []
         motion_detected = False
 
-        for contour in contours:
-            if cv2.contourArea(contour) < self.min_area:
-                continue
+        # Sort contours by area descending and filter out small noise
+        valid_contours = [c for c in contours if cv2.contourArea(c) >= self.min_area]
+        valid_contours = sorted(valid_contours, key=cv2.contourArea, reverse=True)[:10] # Limit to top 10 largest
+
+        for contour in valid_contours:
             motion_detected = True
             (x, y, w, h) = cv2.boundingRect(contour)
             motion_boxes.append((x, y, w, h))

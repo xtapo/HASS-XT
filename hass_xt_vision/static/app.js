@@ -23,9 +23,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const baseUrl = getBaseUrl();
-    if (liveStream) {
-        liveStream.src = baseUrl + "api/stream";
+
+    // Fast image stream updating compatible with HA Ingress
+    let streamActive = true;
+    function updateLiveStream() {
+        if (!streamActive || !liveStream) return;
+        const img = new Image();
+        img.onload = () => {
+            liveStream.src = img.src;
+            setTimeout(updateLiveStream, 66); // ~15 FPS
+        };
+        img.onerror = () => {
+            setTimeout(updateLiveStream, 500);
+        };
+        img.src = baseUrl + "api/snapshot?t=" + Date.now();
     }
+    updateLiveStream();
 
     // Dynamic slider label update
     sensitivityInput.addEventListener("input", (e) => {
