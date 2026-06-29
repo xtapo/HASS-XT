@@ -12,16 +12,21 @@ class AppConfig(BaseModel):
     ai_confidence: float = 0.5
     device_name: str = "hass_xt_camera"
 
-def load_config() -> AppConfig:
-    # Check if running inside Home Assistant Add-on container (/data/options.json)
+def get_options_file_path() -> str:
     ha_options_file = "/data/options.json"
-    if os.path.exists(ha_options_file):
+    if os.path.exists(ha_options_file) or os.path.exists("/data"):
+        return ha_options_file
+    return "local_options.json"
+
+def load_config() -> AppConfig:
+    filepath = get_options_file_path()
+    if os.path.exists(filepath):
         try:
-            with open(ha_options_file, "r") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return AppConfig(**data)
         except Exception as e:
-            print(f"[Config] Error loading HA options.json: {e}")
+            print(f"[Config] Error loading options from {filepath}: {e}")
     
     # Fallback to environment variables or defaults
     return AppConfig(
@@ -34,5 +39,19 @@ def load_config() -> AppConfig:
         ai_confidence=float(os.getenv("AI_CONFIDENCE", "0.5")),
         device_name=os.getenv("DEVICE_NAME", "hass_xt_camera")
     )
+
+def save_config(new_data: dict):
+    global config
+    for key, value in new_data.items():
+        if hasattr(config, key):
+            setattr(config, key, value)
+    
+    filepath = get_options_file_path()
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(config.model_dump(), f, indent=2, ensure_ascii=False)
+        print(f"[Config] Saved updated options to {filepath}")
+    except Exception as e:
+        print(f"[Config] Error saving config to {filepath}: {e}")
 
 config = load_config()

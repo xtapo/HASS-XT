@@ -8,6 +8,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const personStatus = document.getElementById("person-status");
     const detectionsList = document.getElementById("detections-list");
 
+    const rtspUrlInput = document.getElementById("rtsp-url-input");
+    const mqttHostInput = document.getElementById("mqtt-host-input");
+    const mqttPortInput = document.getElementById("mqtt-port-input");
+    const mqttUserInput = document.getElementById("mqtt-user-input");
+    const mqttPassInput = document.getElementById("mqtt-pass-input");
+
     const sensitivityInput = document.getElementById("sensitivity-input");
     const sensitivityVal = document.getElementById("sensitivity-val");
     const confidenceInput = document.getElementById("confidence-input");
@@ -54,6 +60,12 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const res = await fetch(baseUrl + "api/config");
             const data = await res.json();
+            if (rtspUrlInput) rtspUrlInput.value = data.rtsp_url || "";
+            if (mqttHostInput) mqttHostInput.value = data.mqtt_host || "";
+            if (mqttPortInput) mqttPortInput.value = data.mqtt_port || 1883;
+            if (mqttUserInput) mqttUserInput.value = data.mqtt_user || "";
+            if (mqttPassInput) mqttPassInput.value = data.mqtt_password || "";
+
             sensitivityInput.value = data.motion_sensitivity;
             sensitivityVal.textContent = data.motion_sensitivity;
             confidenceInput.value = data.ai_confidence;
@@ -67,18 +79,30 @@ document.addEventListener("DOMContentLoaded", () => {
     saveBtn.addEventListener("click", async () => {
         try {
             const payload = {
+                rtsp_url: rtspUrlInput.value.trim(),
+                mqtt_host: mqttHostInput.value.trim(),
+                mqtt_port: parseInt(mqttPortInput.value) || 1883,
+                mqtt_user: mqttUserInput.value.trim(),
+                mqtt_password: mqttPassInput.value.trim(),
                 motion_sensitivity: parseInt(sensitivityInput.value),
                 ai_confidence: parseFloat(confidenceInput.value)
             };
+
+            saveBtn.textContent = "Đang áp dụng...";
+            saveBtn.disabled = true;
+
             const res = await fetch(baseUrl + "api/config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            alert("Đã lưu cấu hình mới thành công!");
+            alert("Đã lưu và áp dụng cấu hình mới thành công!");
         } catch (err) {
             alert("Lỗi khi lưu cấu hình!");
+        } finally {
+            saveBtn.textContent = "Lưu Cấu Hình Tức Thời";
+            saveBtn.disabled = false;
         }
     });
 

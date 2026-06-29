@@ -5,13 +5,18 @@ from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from app.config import config
+from app.config import config, save_config
 
 APP_VERSION = "1.1.0"
 
 class ConfigUpdateModel(BaseModel):
-    motion_sensitivity: int
-    ai_confidence: float
+    rtsp_url: str
+    mqtt_host: str
+    mqtt_port: int = 1883
+    mqtt_user: str = ""
+    mqtt_password: str = ""
+    motion_sensitivity: int = 25
+    ai_confidence: float = 0.5
 
 def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAPI:
     app = FastAPI(title="HASS-XT AI Vision Web API", version=APP_VERSION)
@@ -39,15 +44,43 @@ def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAP
     async def get_config():
         return {
             "rtsp_url": config.rtsp_url,
+            "mqtt_host": config.mqtt_host,
+            "mqtt_port": config.mqtt_port,
+            "mqtt_user": config.mqtt_user,
+            "mqtt_password": config.mqtt_password,
             "motion_sensitivity": motion_detector.sensitivity,
             "ai_confidence": ai_engine.confidence_threshold
         }
 
     @app.post("/api/config")
     async def update_config(payload: ConfigUpdateModel):
+        # Check if RTSP URL changed
+        rtsp_changed = (payload.rtsp_url != config.rtsp_url)
+        mqtt_changed = (payload.mqtt_host != config.mqtt_host or payload.mqtt_port != config.mqtt_port or
+                        payload.mqtt_user != config.mqtt_user or payload.mqtt_password != config.mqtt_password)
+
+        # Save to disk and memory
+        save_config(payload.model_dump())
+
+        # Apply to engines
         motion_detector.sensitivity = payload.motion_sensitivity
         ai_engine.confidence_threshold = payload.ai_confidence
-        return {"status": "success", "message": "Configuration updated successfully"}
+
+        if rtsp_changed and stream_reader:
+            stream_reader.rtsp_url = payload.rtsp_url
+            stream_reader._connect()
+
+        if mqtt_changed and mqtt_client:
+            mqtt_client.stop()
+            mqtt_client.host = payload.mqtt_host
+            mqtt_client.port = payload.mqtt_port
+            mqtt_client.user = payload.mqtt_user
+            mqtt_client.password = payload.mqtt_password
+            if mqtt_client.user and mqtt_client.password:
+                mqtt_client.client.username_pw_set(mqtt_client.user, mqtt_client.password)
+            mqtt_client.start()
+
+        return {"status": "success", "message": "Configuration updated and re-applied successfully"}
 
     @app.get("/api/snapshot")
     async def get_snapshot():
