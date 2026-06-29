@@ -13,15 +13,16 @@ class HAMQTTClient:
         self.password = password.strip() if password else ""
         self.device_name = device_name
         self.connected = False
+        self.status_text = "Disconnected"
         self.client = None
 
     def start(self):
         self.stop()
         try:
+            self.status_text = "Connecting..."
             print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: '{self.user}')...")
             client_id = f"hass_xt_{int(time.time())}"
             
-            # Flexible client initialization supporting all paho-mqtt versions
             try:
                 self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
             except Exception:
@@ -38,6 +39,7 @@ class HAMQTTClient:
         except Exception as e:
             print(f"[MQTT] Connection setup error: {e}")
             self.connected = False
+            self.status_text = f"Error: {e}"
 
     def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         code = getattr(rc, "value", rc)
@@ -45,13 +47,21 @@ class HAMQTTClient:
         if code == 0:
             print(f"[MQTT] Successfully connected to MQTT broker at {self.host}!")
             self.connected = True
+            self.status_text = "Connected"
             try:
                 self._publish_discovery_configs()
             except Exception as e:
                 print(f"[MQTT] Error publishing discovery configs: {e}")
         else:
-            print(f"[MQTT] Connection rejected by {self.host} with code {code}")
             self.connected = False
+            if code == 4:
+                self.status_text = "Bad Username/Password (Code 4)"
+            elif code == 5:
+                self.status_text = "Not Authorized (Code 5)"
+            else:
+                self.status_text = f"Refused (Code {code})"
+            print(f"[MQTT] Connection rejected by {self.host}: {self.status_text}")
+            
             # Smart fallback to internal HA broker if running as HA Add-on
             if self.host != "core-mosquitto" and (os.path.exists("/data/options.json") or os.path.exists("/data")):
                 print("[MQTT] Triggering automatic fallback to internal HA broker 'core-mosquitto'...")
@@ -62,6 +72,8 @@ class HAMQTTClient:
         code = getattr(rc, "value", rc)
         print(f"[MQTT] Disconnected from MQTT broker (code: {code}).")
         self.connected = False
+        if code != 0 and self.status_text == "Connected":
+            self.status_text = "Disconnected"
 
     def _publish_discovery_configs(self):
         if not self.client or not self.connected:

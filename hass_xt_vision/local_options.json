@@ -5,6 +5,6 @@
   "mqtt_user": "jamid",
   "mqtt_password": "Mylove@123",
   "motion_sensitivity": 25,
-  "ai_confidence": 0.5,
+  "ai_confidence": 0.45,
   "device_name": "hass_xt_camera"
 }

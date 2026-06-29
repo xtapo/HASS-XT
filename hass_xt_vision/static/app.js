@@ -122,7 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 mqttBadge.textContent = "MQTT: Connected";
                 mqttBadge.className = "badge badge-connected";
             } else {
-                mqttBadge.textContent = "MQTT: Disconnected";
+                const text = data.mqtt_status_text || "Disconnected";
+                mqttBadge.textContent = "MQTT: " + text;
                 mqttBadge.className = "badge badge-disconnected";
             }
 

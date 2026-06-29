@@ -38,6 +38,7 @@ def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAP
             "detections_count": len(app.state.latest_detections),
             "detections": app.state.latest_detections,
             "mqtt_connected": mqtt_client.connected,
+            "mqtt_status_text": mqtt_client.status_text,
             "fps": round(app.state.fps, 1)
         }
 
