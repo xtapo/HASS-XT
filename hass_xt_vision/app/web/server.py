@@ -1,6 +1,7 @@
 import cv2
 import time
 import asyncio
+import numpy as np
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -85,15 +86,21 @@ def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAP
     @app.get("/api/snapshot")
     async def get_snapshot():
         frame = app.state.latest_annotated_frame
-        if frame is not None:
-            ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-            if ret:
-                return Response(content=jpeg.tobytes(), media_type="image/jpeg", headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0"
-                })
-        return Response(status_code=404)
+        if frame is None:
+            # Generate placeholder image while stream connects
+            placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(placeholder, "Connecting to camera stream...", (140, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 255), 2)
+            frame = placeholder
+
+        ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if ret:
+            return Response(content=jpeg.tobytes(), media_type="image/jpeg", headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            })
+        return Response(status_code=500)
 
     def generate_mjpeg():
         while True:

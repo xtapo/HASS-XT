@@ -1,0 +1,10 @@
+{
+  "rtsp_url": "rtsp://admin:YQKWNY@192.168.88.253:554/h246_stream",
+  "mqtt_host": "localhost",
+  "mqtt_port": 1883,
+  "mqtt_user": "jamid",
+  "mqtt_password": "Mylove@123",
+  "motion_sensitivity": 25,
+  "ai_confidence": 0.5,
+  "device_name": "hass_xt_camera"
+}
