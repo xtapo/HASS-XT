@@ -29,7 +29,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Add-on Image
-        uses: home-assistant/builder-action@master
+        uses: home-assistant/builder@master
         with:
           args: |
             --target hass_xt_vision \
