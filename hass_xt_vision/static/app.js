@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
     const liveStream = document.getElementById("live-stream");
+    const versionBadge = document.getElementById("version-badge");
     const mqttBadge = document.getElementById("mqtt-badge");
     const fpsBadge = document.getElementById("fps-badge");
     const motionBadge = document.getElementById("motion-badge");
@@ -73,6 +74,11 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const res = await fetch(baseUrl + "api/status");
             const data = await res.json();
+
+            // Version
+            if (versionBadge && data.version) {
+                versionBadge.textContent = "v" + data.version;
+            }
 
             // MQTT status
             if (data.mqtt_connected) {

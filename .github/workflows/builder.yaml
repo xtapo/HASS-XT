@@ -55,4 +55,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/xtapo/hass_xt_vision-${{ matrix.arch }}:latest
-            ghcr.io/xtapo/hass_xt_vision-${{ matrix.arch }}:1.0.0
+            ghcr.io/xtapo/hass_xt_vision-${{ matrix.arch }}:1.1.0

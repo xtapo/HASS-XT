@@ -7,12 +7,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from app.config import config
 
+APP_VERSION = "1.1.0"
+
 class ConfigUpdateModel(BaseModel):
     motion_sensitivity: int
     ai_confidence: float
 
 def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAPI:
-    app = FastAPI(title="HASS-XT AI Vision Web API", version="1.0.0")
+    app = FastAPI(title="HASS-XT AI Vision Web API", version=APP_VERSION)
     
     # Store dynamic state
     app.state.latest_annotated_frame = None
@@ -24,6 +26,7 @@ def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAP
     async def get_status():
         return {
             "status": "online",
+            "version": APP_VERSION,
             "device_name": config.device_name,
             "motion_detected": app.state.motion_detected,
             "detections_count": len(app.state.latest_detections),
