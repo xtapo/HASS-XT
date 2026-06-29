@@ -11,9 +11,14 @@ class HAMQTTClient:
         self.user = user
         self.password = password
         self.device_name = device_name
-        self.client = mqtt.Client(client_id=f"hass_xt_{int(time.time())}")
         self.connected = False
         
+        # Support both paho-mqtt v1.x and v2.x callback API versions
+        try:
+            self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=f"hass_xt_{int(time.time())}")
+        except AttributeError:
+            self.client = mqtt.Client(client_id=f"hass_xt_{int(time.time())}")
+
         if self.user and self.password:
             self.client.username_pw_set(self.user, self.password)
 
@@ -22,22 +27,24 @@ class HAMQTTClient:
 
     def start(self):
         try:
-            print(f"[MQTT] Connecting to broker {self.host}:{self.port}...")
+            print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: {self.user})...")
             self.client.connect_async(self.host, self.port, keepalive=60)
             self.client.loop_start()
         except Exception as e:
-            print(f"[MQTT] Connection error: {e}")
+            print(f"[MQTT] Connection setup error: {e}")
 
-    def _on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+    def _on_connect(self, client, userdata, flags, rc, properties=None):
+        # Handle integer rc or ReasonCode objects in paho-mqtt v2
+        code = getattr(rc, "value", rc)
+        if code == 0:
             print("[MQTT] Successfully connected to MQTT broker!")
             self.connected = True
             self._publish_discovery_configs()
         else:
-            print(f"[MQTT] Connection failed with code {rc}")
+            print(f"[MQTT] Connection failed with code {code}")
 
-    def _on_disconnect(self, client, userdata, rc):
-        print("[MQTT] Disconnected from MQTT broker.")
+    def _on_disconnect(self, client, userdata, rc, properties=None):
+        print(f"[MQTT] Disconnected from MQTT broker (rc: {rc}).")
         self.connected = False
 
     def _publish_discovery_configs(self):
