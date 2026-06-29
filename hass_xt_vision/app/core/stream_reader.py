@@ -1,7 +1,11 @@
+import os
 import cv2
 import time
 import threading
 import numpy as np
+
+# Force FFMPEG TCP transport for RTSP streams (prevents UDP packet drops and connection failures)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp;stimeout;5000000"
 
 class StreamReader:
     def __init__(self, rtsp_url: str):
@@ -19,12 +23,20 @@ class StreamReader:
         self.thread.start()
 
     def _connect(self):
-        print(f"[StreamReader] Connecting to video stream: {self.rtsp_url}")
-        self.cap = cv2.VideoCapture(self.rtsp_url)
+        print(f"[StreamReader] Connecting to RTSP stream: {self.rtsp_url}")
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+
+        # Open capture with FFMPEG backend
+        self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
         if not self.cap.isOpened():
-            print(f"[StreamReader] Failed to open RTSP stream. Using synthetic stream generator for testing.")
+            print(f"[StreamReader] WARNING: Could not connect to real RTSP camera at '{self.rtsp_url}'. Using test simulation generator.")
             self.is_synthetic = True
         else:
+            print(f"[StreamReader] SUCCESS: Connected to real RTSP camera stream!")
             self.is_synthetic = False
 
     def _generate_synthetic_frame(self, frame_count: int) -> np.ndarray:
@@ -39,29 +51,37 @@ class StreamReader:
         x1 = int(320 + 200 * np.sin(t))
         y1 = int(240 + 50 * np.cos(t * 0.5))
         cv2.rectangle(img, (x1, y1), (x1 + 60, y1 + 120), (0, 255, 120), -1)
-        cv2.putText(img, "SIMULATED PERSON", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(img, "SIMULATED TEST STREAM", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
         # Draw header overlay
-        cv2.putText(img, f"HASS-XT Live Stream - {time.strftime('%Y-%m-%d %H:%M:%S')}", (20, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 255), 2)
+        cv2.putText(img, f"HASS-XT Test Mode (Check RTSP URL) - {time.strftime('%H:%M:%S')}", (20, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 255), 1)
         return img
 
     def _update(self):
         frame_count = 0
+        last_retry = time.time()
         self._connect()
+
         while self.running:
+            now = time.time()
             if self.is_synthetic:
                 frame_count += 1
                 frame = self._generate_synthetic_frame(frame_count)
                 time.sleep(0.04) # ~25 FPS
+
+                # Periodically retry connecting to real camera every 10s
+                if now - last_retry > 10.0:
+                    last_retry = now
+                    self._connect()
             else:
                 ret, frame = self.cap.read()
-                if not ret:
-                    print("[StreamReader] Frame read failed. Attempting reconnect in 3 seconds...")
+                if not ret or frame is None:
+                    print("[StreamReader] Frame read failed. Reconnecting in 3 seconds...")
                     time.sleep(3)
                     self._connect()
                     continue
-            
+
             with self.lock:
                 self.latest_frame = frame
 
