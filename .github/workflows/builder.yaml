@@ -32,6 +32,5 @@ jobs:
         uses: home-assistant/builder-action@master
         with:
           args: |
-            --all \
             --target hass_xt_vision \
-            --image "ghcr.io/${{ github.repository_owner }}/{addon}-{arch}"
+            --image "ghcr.io/xtapo/{addon}-{arch}"
