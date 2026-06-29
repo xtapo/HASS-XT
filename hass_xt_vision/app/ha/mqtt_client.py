@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import cv2
@@ -6,25 +7,27 @@ from typing import Dict, Any, List
 
 class HAMQTTClient:
     def __init__(self, host: str, port: int, user: str = "", password: str = "", device_name: str = "hass_xt_camera"):
-        self.host = host
+        self.host = host.strip() if host else "core-mosquitto"
         self.port = port
-        self.user = user
-        self.password = password
+        self.user = user.strip() if user else ""
+        self.password = password.strip() if password else ""
         self.device_name = device_name
         self.connected = False
         self.client = None
 
     def start(self):
+        self.stop()
         try:
             print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: {self.user})...")
             # Support both paho-mqtt v1.x and v2.x callback API versions with fresh client instance
+            client_id = f"hass_xt_{int(time.time())}"
             try:
-                self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=f"hass_xt_{int(time.time())}")
+                self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
             except AttributeError:
-                self.client = mqtt.Client(client_id=f"hass_xt_{int(time.time())}")
+                self.client = mqtt.Client(client_id=client_id)
 
-            if self.user and self.password:
-                self.client.username_pw_set(self.user, self.password)
+            if self.user:
+                self.client.username_pw_set(self.user, self.password if self.password else None)
 
             self.client.on_connect = self._on_connect
             self.client.on_disconnect = self._on_disconnect
@@ -33,17 +36,22 @@ class HAMQTTClient:
             self.client.loop_start()
         except Exception as e:
             print(f"[MQTT] Connection setup error: {e}")
+            self.connected = False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        # Handle integer rc or ReasonCode objects in paho-mqtt v2
         code = getattr(rc, "value", rc)
         if code == 0:
-            print("[MQTT] Successfully connected to MQTT broker!")
+            print(f"[MQTT] Successfully connected to MQTT broker at {self.host}!")
             self.connected = True
             self._publish_discovery_configs()
         else:
-            print(f"[MQTT] Connection failed with code {code}")
+            print(f"[MQTT] Connection failed to {self.host} with code {code}")
             self.connected = False
+            # Fallback to internal HA broker if running as HA Add-on and external IP failed
+            if self.host != "core-mosquitto" and (os.path.exists("/data/options.json") or os.path.exists("/data")):
+                print("[MQTT] Attempting fallback to internal HA broker 'core-mosquitto'...")
+                self.host = "core-mosquitto"
+                self.start()
 
     def _on_disconnect(self, client, userdata, rc, properties=None):
         print(f"[MQTT] Disconnected from MQTT broker (rc: {rc}).")

@@ -72,13 +72,10 @@ def create_app(stream_reader, motion_detector, ai_engine, mqtt_client) -> FastAP
             stream_reader._connect()
 
         if mqtt_changed and mqtt_client:
-            mqtt_client.stop()
-            mqtt_client.host = payload.mqtt_host
+            mqtt_client.host = payload.mqtt_host.strip()
             mqtt_client.port = payload.mqtt_port
-            mqtt_client.user = payload.mqtt_user
-            mqtt_client.password = payload.mqtt_password
-            if mqtt_client.user and mqtt_client.password:
-                mqtt_client.client.username_pw_set(mqtt_client.user, mqtt_client.password)
+            mqtt_client.user = payload.mqtt_user.strip()
+            mqtt_client.password = payload.mqtt_password.strip()
             mqtt_client.start()
 
         return {"status": "success", "message": "Configuration updated and re-applied successfully"}
