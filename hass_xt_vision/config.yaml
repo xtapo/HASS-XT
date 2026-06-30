@@ -1,5 +1,5 @@
-name: "HASS-XT AI Vision Describer"
-version: "2.1.0"
+name: "HASS-XT AI Vision Entity Describer"
+version: "2.3.0"
 slug: "hass_xt_vision"
 description: "AI Vision Entity Describer Addon: Describe HA cameras and entity pictures via AI proxy with MQTT auto-discovery"
 url: "https://github.com/xtapo/HASS-XT"

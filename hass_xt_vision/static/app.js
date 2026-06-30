@@ -3,8 +3,8 @@
 // DOM Elements
 const haUrlInput = document.getElementById('ha-url-input');
 const haTokenInput = document.getElementById('ha-token-input');
-const cameraEntitiesInput = document.getElementById('camera-entities-input');
 const scanIntervalInput = document.getElementById('scan-interval-input');
+const motionThresholdInput = document.getElementById('motion-threshold-input');
 const aiBaseUrlInput = document.getElementById('ai-base-url-input');
 const aiKeyInput = document.getElementById('ai-key-input');
 const aiModelInput = document.getElementById('ai-model-input');
@@ -20,6 +20,8 @@ const loadHaEntitiesBtn = document.getElementById('load-ha-entities-btn');
 const haEntitiesStatus = document.getElementById('ha-entities-status');
 const entityHelper = document.getElementById('entity-helper');
 const entityPicker = document.getElementById('entity-picker');
+const manualCameraIdInput = document.getElementById('manual-camera-id-input');
+const addManualCameraBtn = document.getElementById('add-manual-camera-btn');
 
 const testAllBtn = document.getElementById('test-all-btn');
 const aiStatusText = document.getElementById('ai-status-text');
@@ -43,6 +45,8 @@ const toastNotification = document.getElementById('notification-toast');
 let currentConfig = {};
 let historyEntries = [];
 let selectedEntryId = null;
+let configuredCameras = [];
+let cameraSettings = {};
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
@@ -70,12 +74,9 @@ function setupEventListeners() {
         const val = e.target.value;
         if (!val) return;
         
-        let currentText = cameraEntitiesInput.value.trim();
-        const entitiesList = currentText ? currentText.split('\n').map(x => x.trim()) : [];
-        
-        if (!entitiesList.includes(val)) {
-            entitiesList.push(val);
-            cameraEntitiesInput.value = entitiesList.join('\n');
+        if (!configuredCameras.includes(val)) {
+            configuredCameras.push(val);
+            renderCameraList();
             showToast(`Đã thêm ${val} vào danh sách.`);
             updateManualTriggerDropdown();
         } else {
@@ -83,6 +84,29 @@ function setupEventListeners() {
         }
         
         entityPicker.value = ''; // Reset picker selection
+    });
+
+    // Manual camera add button click
+    addManualCameraBtn.addEventListener('click', () => {
+        const val = manualCameraIdInput.value.trim();
+        if (!val) {
+            showToast('Vui lòng nhập entity_id!', true);
+            return;
+        }
+        if (!val.includes('.')) {
+            showToast('Entity ID không hợp lệ (ví dụ: camera.living_room)!', true);
+            return;
+        }
+        
+        if (!configuredCameras.includes(val)) {
+            configuredCameras.push(val);
+            renderCameraList();
+            showToast(`Đã thêm ${val} vào danh sách.`);
+            updateManualTriggerDropdown();
+            manualCameraIdInput.value = '';
+        } else {
+            showToast(`${val} đã tồn tại trong danh sách.`, true);
+        }
     });
 }
 
@@ -105,7 +129,7 @@ function showToast(message, isError = false) {
 // Fetch configuration from FastAPI
 async function fetchConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await fetch('api/config');
         if (!response.ok) throw new Error('Failed to load configuration');
         
         const data = await response.json();
@@ -114,8 +138,14 @@ async function fetchConfig() {
         // Populate inputs
         haUrlInput.value = data.ha_url || '';
         haTokenInput.value = data.ha_token || '';
-        cameraEntitiesInput.value = (data.camera_entities || []).join('\n');
+        
+        // Populate global state and render
+        configuredCameras = data.camera_entities || [];
+        cameraSettings = data.camera_settings || {};
+        renderCameraList();
+        
         scanIntervalInput.value = data.scan_interval || 30;
+        motionThresholdInput.value = data.motion_threshold !== undefined ? data.motion_threshold : 2.0;
         aiBaseUrlInput.value = data.ai_proxy_base_url || '';
         aiKeyInput.value = data.ai_api_key || '';
         aiModelInput.value = data.ai_model || '';
@@ -146,16 +176,13 @@ async function saveConfig() {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Đang lưu...';
     
-    const entitiesText = cameraEntitiesInput.value;
-    const entitiesArray = entitiesText.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-        
     const payload = {
         ha_url: haUrlInput.value.trim(),
         ha_token: haTokenInput.value.trim(),
-        camera_entities: entitiesArray,
+        camera_entities: configuredCameras,
+        camera_settings: cameraSettings,
         scan_interval: parseInt(scanIntervalInput.value) || 30,
+        motion_threshold: parseFloat(motionThresholdInput.value) || 2.0,
         ai_proxy_base_url: aiBaseUrlInput.value.trim(),
         ai_api_key: aiKeyInput.value.trim(),
         ai_model: aiModelInput.value.trim(),
@@ -170,7 +197,7 @@ async function saveConfig() {
     };
     
     try {
-        const response = await fetch('/api/config', {
+        const response = await fetch('api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -193,7 +220,7 @@ async function saveConfig() {
 // Fetch general status info
 async function fetchStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await fetch('api/status');
         if (!response.ok) throw new Error('Status check failed');
         
         const data = await response.json();
@@ -220,7 +247,7 @@ async function fetchStatus() {
 // Fetch SQLite history entries
 async function fetchHistory() {
     try {
-        const response = await fetch('/api/history?limit=40');
+        const response = await fetch('api/history?limit=40');
         if (!response.ok) throw new Error('Failed to load history');
         
         const data = await response.json();
@@ -250,7 +277,7 @@ function renderHistoryList() {
         // Resolve image source
         let thumbContent = `<span class="thumb-placeholder">📷</span>`;
         if (entry.image_filename && isSuccess) {
-            thumbContent = `<img src="/images/${entry.image_filename}" class="history-thumb" alt="Thumbnail" onerror="this.outerHTML='<span class=\"thumb-placeholder\">📷</span>'">`;
+            thumbContent = `<img src="images/${entry.image_filename}" class="history-thumb" alt="Thumbnail" onerror="this.outerHTML='<span class=\"thumb-placeholder\">📷</span>'">`;
         } else if (!isSuccess) {
             thumbContent = `<span class="thumb-placeholder text-danger">⚠️</span>`;
         }
@@ -308,7 +335,7 @@ function selectHistoryEntry(id) {
     `;
     
     if (entry.image_filename) {
-        imgHtml = `<img src="/images/${entry.image_filename}" class="detail-image" alt="Captured Vision Image" />`;
+        imgHtml = `<img src="images/${entry.image_filename}" class="detail-image" alt="Captured Vision Image" />`;
     }
     
     const descContent = isSuccess 
@@ -366,7 +393,7 @@ async function deleteHistoryEntry(id, event) {
     if (!confirm(`Bạn có chắc chắn muốn xóa bản ghi này?`)) return;
     
     try {
-        const response = await fetch(`/api/history/${id}`, {
+        const response = await fetch(`api/history/${id}`, {
             method: 'DELETE'
         });
         
@@ -397,7 +424,7 @@ async function clearHistory() {
     if (!confirm('BẠN CÓ CHẮC CHẮN muốn XÓA TOÀN BỘ lịch sử lưu trữ? Hành động này không thể hoàn tác.')) return;
     
     try {
-        const response = await fetch('/api/history/clear', {
+        const response = await fetch('api/history/clear', {
             method: 'POST'
         });
         
@@ -430,7 +457,7 @@ async function queryHAEntities(triggerToast = true) {
     haEntitiesStatus.textContent = 'Đang tìm kiếm camera...';
     
     try {
-        let apiUrl = '/api/camera_entities';
+        let apiUrl = 'api/camera_entities';
         if (haUrl) {
             const params = new URLSearchParams({ ha_url: haUrl, ha_token: haToken });
             apiUrl += `?${params.toString()}`;
@@ -472,13 +499,8 @@ async function queryHAEntities(triggerToast = true) {
 
 // Sync the quick run description drop down list
 function updateManualTriggerDropdown() {
-    const textVal = cameraEntitiesInput.value;
-    const entities = textVal.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-        
     let html = '<option value="">-- Chọn Camera --</option>';
-    entities.forEach(ent => {
+    configuredCameras.forEach(ent => {
         html += `<option value="${ent}">${ent}</option>`;
     });
     manualScanSelect.innerHTML = html;
@@ -497,7 +519,7 @@ async function runManualScan() {
     showToast(`Đang chạy chụp & mô tả cho ${entityId}...`);
     
     try {
-        const response = await fetch('/api/scan_now', {
+        const response = await fetch('api/scan_now', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ entity_id: entityId })
@@ -542,7 +564,7 @@ async function testHAConnection() {
     haEntitiesStatus.className = 'small-text text-secondary';
     
     try {
-        const response = await fetch('/api/test_ha', {
+        const response = await fetch('api/test_ha', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ha_url: haUrl, ha_token: haToken })
@@ -600,7 +622,7 @@ async function testAllConnections() {
     tgStatusText.className = 'small-text text-secondary';
     
     try {
-        const response = await fetch('/api/test_all', {
+        const response = await fetch('api/test_all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -646,5 +668,125 @@ async function testAllConnections() {
     } finally {
         testAllBtn.disabled = false;
         testAllBtn.textContent = 'Kiểm tra kết nối';
+    }
+}
+
+// Render dynamic camera card list
+function renderCameraList() {
+    const cameraListContainer = document.getElementById('camera-list');
+    if (!cameraListContainer) return;
+    
+    if (configuredCameras.length === 0) {
+        cameraListContainer.innerHTML = `<p class="empty-msg" style="padding: 1rem; font-size: 0.8rem; text-align: center;">Chưa cấu hình camera nào.</p>`;
+        return;
+    }
+    
+    let html = '';
+    configuredCameras.forEach(entityId => {
+        const settings = cameraSettings[entityId] || {};
+        const scanInterval = settings.scan_interval !== undefined ? settings.scan_interval : '';
+        const aiPrompt = settings.ai_prompt || '';
+        const aiModel = settings.ai_model || '';
+        const motionThreshold = settings.motion_threshold !== undefined ? settings.motion_threshold : '';
+        
+        // Use clean identifier for HTML ID
+        const safeId = 'settings-' + entityId.replace(/\./g, '_');
+        
+        html += `
+            <div class="camera-item-card" id="card-${entityId.replace(/\./g, '_')}">
+                <div class="camera-item-header">
+                    <span class="camera-item-title">${entityId}</span>
+                    <div class="camera-item-actions">
+                        <button type="button" class="camera-action-btn toggle-settings-btn" title="Cài đặt riêng" onclick="toggleCameraSettings('${entityId}')">
+                            ⚙️
+                        </button>
+                        <button type="button" class="camera-action-btn delete-btn" title="Xóa camera" onclick="removeCameraFromConfig('${entityId}')">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                <div class="camera-item-settings collapsed" id="${safeId}">
+                    <div class="camera-setting-row">
+                        <label>Chu kỳ quét riêng (giây, bỏ trống để dùng mặc định):</label>
+                        <input type="number" min="5" class="text-input cam-interval-input" 
+                               value="${scanInterval}" placeholder="Mặc định"
+                               onchange="updateCameraSetting('${entityId}', 'scan_interval', this.value)">
+                    </div>
+                    <div class="camera-setting-row">
+                        <label>Ngưỡng chuyển động riêng (%, bỏ trống để dùng mặc định):</label>
+                        <input type="number" min="0.1" step="0.1" class="text-input cam-motion-input" 
+                               value="${motionThreshold}" placeholder="Mặc định"
+                               onchange="updateCameraSetting('${entityId}', 'motion_threshold', this.value)">
+                    </div>
+                    <div class="camera-setting-row">
+                        <label>Prompt gửi AI riêng (bỏ trống để dùng mặc định):</label>
+                        <textarea rows="2" class="text-input cam-prompt-input" 
+                                  placeholder="Mặc định"
+                                  onchange="updateCameraSetting('${entityId}', 'ai_prompt', this.value)">${aiPrompt}</textarea>
+                    </div>
+                    <div class="camera-setting-row">
+                        <label>Vision Model riêng (bỏ trống để dùng mặc định):</label>
+                        <input type="text" class="text-input cam-model-input" 
+                               value="${aiModel}" placeholder="Mặc định"
+                               onchange="updateCameraSetting('${entityId}', 'ai_model', this.value)">
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    cameraListContainer.innerHTML = html;
+}
+
+// Toggle collapse/expand settings
+function toggleCameraSettings(entityId) {
+    const safeId = 'settings-' + entityId.replace(/\./g, '_');
+    const el = document.getElementById(safeId);
+    if (el) {
+        el.classList.toggle('collapsed');
+    }
+}
+
+// Remove camera from config list
+function removeCameraFromConfig(entityId) {
+    if (confirm(`Bạn có chắc muốn xóa camera ${entityId} khỏi cấu hình?`)) {
+        configuredCameras = configuredCameras.filter(c => c !== entityId);
+        delete cameraSettings[entityId];
+        renderCameraList();
+        updateManualTriggerDropdown();
+    }
+}
+
+// Update local cameraSettings states
+function updateCameraSetting(entityId, key, value) {
+    if (!cameraSettings[entityId]) {
+        cameraSettings[entityId] = {};
+    }
+    
+    if (key === 'scan_interval') {
+        const intVal = parseInt(value);
+        if (isNaN(intVal) || intVal <= 0) {
+            delete cameraSettings[entityId].scan_interval;
+        } else {
+            cameraSettings[entityId].scan_interval = intVal;
+        }
+    } else if (key === 'motion_threshold') {
+        const floatVal = parseFloat(value);
+        if (isNaN(floatVal) || floatVal <= 0.0) {
+            delete cameraSettings[entityId].motion_threshold;
+        } else {
+            cameraSettings[entityId].motion_threshold = floatVal;
+        }
+    } else {
+        const strVal = value.trim();
+        if (!strVal) {
+            delete cameraSettings[entityId][key];
+        } else {
+            cameraSettings[entityId][key] = strVal;
+        }
+    }
+    
+    // Clean up empty settings object
+    if (Object.keys(cameraSettings[entityId]).length === 0) {
+        delete cameraSettings[entityId];
     }
 }

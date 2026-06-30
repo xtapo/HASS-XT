@@ -5,6 +5,8 @@ import requests
 import datetime
 import threading
 import hashlib
+import cv2
+import numpy as np
 from typing import Optional, Tuple
 from app.config import config
 from app.core.db import HistoryDatabase
@@ -80,6 +82,40 @@ def fetch_entity_image(ha_url: str, ha_token: str, entity_id: str) -> bytes:
             pass
 
     raise Exception(f"Failed to fetch image for entity {entity_id} from Home Assistant (URL: {ha_url})")
+
+def detect_motion(image_bytes_1: bytes, image_bytes_2: bytes, threshold: float = 2.0) -> Tuple[bool, float]:
+    try:
+        nparr1 = np.frombuffer(image_bytes_1, np.uint8)
+        img1 = cv2.imdecode(nparr1, cv2.IMREAD_GRAYSCALE)
+        
+        nparr2 = np.frombuffer(image_bytes_2, np.uint8)
+        img2 = cv2.imdecode(nparr2, cv2.IMREAD_GRAYSCALE)
+        
+        if img1 is None or img2 is None:
+            print("[Scanner] Failed to decode images for motion detection. Defaulting to motion detected.")
+            return True, 100.0
+            
+        if img1.shape != img2.shape:
+            print(f"[Scanner] Image dimensions mismatch: {img1.shape} vs {img2.shape}. Defaulting to motion detected.")
+            return True, 100.0
+            
+        img1_blur = cv2.GaussianBlur(img1, (21, 21), 0)
+        img2_blur = cv2.GaussianBlur(img2, (21, 21), 0)
+        
+        diff = cv2.absdiff(img1_blur, img2_blur)
+        
+        _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
+        
+        non_zero_count = np.count_nonzero(thresh)
+        total_pixels = thresh.shape[0] * thresh.shape[1]
+        changed_percent = (non_zero_count / total_pixels) * 100.0
+        
+        has_motion = changed_percent >= threshold
+        print(f"[Scanner] Motion detection: {changed_percent:.2f}% pixels changed (threshold: {threshold}%). Motion: {has_motion}")
+        return has_motion, changed_percent
+    except Exception as e:
+        print(f"[Scanner] Exception in motion detection algorithm: {e}. Defaulting to motion detected.")
+        return True, 100.0
 
 def call_ai_vision(api_url: str, api_key: str, model: str, prompt: str, image_bytes: bytes) -> str:
     # Build endpoint URL:
@@ -207,30 +243,58 @@ class VisionScanner:
     def _run_loop(self):
         # Allow initial system startup and MQTT client connection
         time.sleep(3)
+        last_scan_times = {}  # entity_id -> float (timestamp)
+        active_threads = {}   # entity_id -> Thread
+        
         while self.running:
             try:
-                # Capture list to avoid modifications during loop
                 entities = list(config.camera_entities)
                 if entities:
-                    print(f"[Scanner] Starting periodic cycle for {len(entities)} entities: {entities}")
+                    now = time.time()
                     for entity_id in entities:
                         if not self.running:
                             break
-                        # Process individual entity (background polling, duplicate check active)
-                        self.scan_entity(entity_id, force=False)
-                        # Small delay between entities to avoid overloading APIs
-                        time.sleep(1)
+                            
+                        # Get custom interval or fallback to global scan_interval
+                        settings = config.camera_settings.get(entity_id) if hasattr(config, "camera_settings") else None
+                        interval = None
+                        if settings:
+                            if isinstance(settings, dict):
+                                interval = settings.get("scan_interval")
+                            else:
+                                interval = getattr(settings, "scan_interval", None)
+                                
+                        if interval is None or interval == 0:
+                            interval = config.scan_interval
+                        interval = max(5, interval)
+                        
+                        last_scan = last_scan_times.get(entity_id, 0.0)
+                        if now - last_scan >= interval:
+                            # Verify if a scan thread is already running for this entity
+                            t = active_threads.get(entity_id)
+                            if t and t.is_alive():
+                                print(f"[Scanner] Previous scan for {entity_id} is still running. Skipping this cycle.")
+                                continue
+                                
+                            last_scan_times[entity_id] = now
+                            
+                            # Start scanning in a background thread
+                            print(f"[Scanner] Starting scan thread for {entity_id} (interval: {interval}s)")
+                            scan_thread = threading.Thread(
+                                target=self.scan_entity,
+                                args=(entity_id, False),
+                                daemon=True
+                            )
+                            active_threads[entity_id] = scan_thread
+                            scan_thread.start()
                 else:
-                    print("[Scanner] No camera entities configured for monitoring.")
+                    # Sleep a bit if no entities configured
+                    time.sleep(1)
             except Exception as e:
                 print(f"[Scanner] Error in scanner cycle: {e}")
                 
-            # Sleep in small increments so we can exit quickly if stopped
-            elapsed = 0
-            scan_interval = max(5, config.scan_interval)
-            while self.running and elapsed < scan_interval:
-                time.sleep(1)
-                elapsed += 1
+            # Sleep 1 second before checking scheduler again
+            time.sleep(1)
 
     def scan_entity(self, entity_id: str, force: bool = False) -> Tuple[bool, str, str]:
         # Perform a scan for a single entity and publish to MQTT + DB.
@@ -253,9 +317,8 @@ class VisionScanner:
             image_bytes = fetch_entity_image(config.ha_url, token, entity_id)
             
             # Check duplicate hash to optimize API usage (bypass if forced scan)
+            # Check for motion to optimize API usage (bypass if forced scan)
             if not force:
-                new_hash = hashlib.md5(image_bytes).hexdigest()
-                
                 # Check last successful image in DB
                 last_successful_file = None
                 import sqlite3
@@ -280,12 +343,25 @@ class VisionScanner:
                         try:
                             with open(last_image_path, "rb") as lf:
                                 last_image_bytes = lf.read()
-                            last_hash = hashlib.md5(last_image_bytes).hexdigest()
-                            if new_hash == last_hash:
-                                print(f"[Scanner] Image for {entity_id} has not changed since last successful scan. Skipping API call.")
-                                return True, "No change (skipped duplicate)", ""
+                                
+                            # Resolve threshold
+                            settings = config.camera_settings.get(entity_id) if hasattr(config, "camera_settings") else None
+                            threshold = None
+                            if settings:
+                                if isinstance(settings, dict):
+                                    threshold = settings.get("motion_threshold")
+                                else:
+                                    threshold = getattr(settings, "motion_threshold", None)
+                            
+                            if threshold is None or threshold <= 0:
+                                threshold = getattr(config, "motion_threshold", 2.0)
+                                
+                            has_mov, changed_pct = detect_motion(image_bytes, last_image_bytes, threshold)
+                            if not has_mov:
+                                print(f"[Scanner] OpenCV: No significant motion detected for {entity_id} ({changed_pct:.2f}% < {threshold}%). Skipping AI call.")
+                                return True, f"No change (motion {changed_pct:.2f}% < {threshold}%)", ""
                         except Exception as he:
-                            print(f"[Scanner] Error reading last image for hash check: {he}")
+                            print(f"[Scanner] Error reading last image or running motion detection: {he}")
 
             # Save image to file
             with open(image_path, "wb") as f:
@@ -296,11 +372,25 @@ class VisionScanner:
                 raise Exception("ai_proxy_base_url is not configured in addon Web UI")
 
             # 3. Call AI
+            settings = config.camera_settings.get(entity_id) if hasattr(config, "camera_settings") else None
+            prompt = None
+            model = None
+            if settings:
+                if isinstance(settings, dict):
+                    prompt = settings.get("ai_prompt")
+                    model = settings.get("ai_model")
+                else:
+                    prompt = getattr(settings, "ai_prompt", None)
+                    model = getattr(settings, "ai_model", None)
+                    
+            prompt = prompt or config.ai_prompt
+            model = model or config.ai_model
+
             description = call_ai_vision(
                 config.ai_proxy_base_url,
                 config.ai_api_key,
-                config.ai_model,
-                config.ai_prompt,
+                model,
+                prompt,
                 image_bytes
             )
 

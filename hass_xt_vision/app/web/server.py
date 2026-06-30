@@ -4,17 +4,19 @@ from fastapi import FastAPI, Response, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.config import config, save_config
 from app.core.scanner import db, images_dir
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.3.0"
 
 class ConfigUpdateModel(BaseModel):
     ha_url: str
     ha_token: Optional[str] = ""
     camera_entities: List[str]
+    camera_settings: Optional[Dict[str, dict]] = {}
     scan_interval: int = 30
+    motion_threshold: float = 2.0
     ai_proxy_base_url: str
     ai_api_key: Optional[str] = ""
     ai_model: str
@@ -60,7 +62,9 @@ def create_app(scanner, mqtt_client) -> FastAPI:
             "ha_url": config.ha_url,
             "ha_token": config.ha_token,
             "camera_entities": config.camera_entities,
+            "camera_settings": getattr(config, "camera_settings", {}),
             "scan_interval": config.scan_interval,
+            "motion_threshold": getattr(config, "motion_threshold", 2.0),
             "ai_proxy_base_url": config.ai_proxy_base_url,
             "ai_api_key": config.ai_api_key,
             "ai_model": config.ai_model,

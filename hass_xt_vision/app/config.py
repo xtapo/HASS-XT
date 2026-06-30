@@ -1,13 +1,21 @@
 import os
 import json
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Optional
+
+class CameraSetting(BaseModel):
+    scan_interval: Optional[int] = None
+    ai_prompt: Optional[str] = None
+    ai_model: Optional[str] = None
+    motion_threshold: Optional[float] = None
 
 class AppConfig(BaseModel):
     ha_url: str = "http://supervisor/core"
     ha_token: str = ""
     camera_entities: List[str] = []
+    camera_settings: Dict[str, CameraSetting] = {}
     scan_interval: int = 30
+    motion_threshold: float = 2.0
     ai_proxy_base_url: str = ""
     ai_api_key: str = ""
     ai_model: str = ""
@@ -50,6 +58,7 @@ def load_config() -> AppConfig:
         ha_token=os.getenv("HA_TOKEN", ha_token_env),
         camera_entities=[],
         scan_interval=int(os.getenv("SCAN_INTERVAL", "30")),
+        motion_threshold=float(os.getenv("MOTION_THRESHOLD", "2.0")),
         ai_proxy_base_url=os.getenv("AI_PROXY_BASE_URL", ""),
         ai_api_key=os.getenv("AI_API_KEY", ""),
         ai_model=os.getenv("AI_MODEL", ""),
@@ -74,7 +83,16 @@ def save_config(new_data: dict):
         
     for key, value in new_data.items():
         if hasattr(config, key):
-            setattr(config, key, value)
+            if key == "camera_settings" and isinstance(value, dict):
+                typed_settings = {}
+                for k, v in value.items():
+                    if isinstance(v, dict):
+                        typed_settings[k] = CameraSetting(**v)
+                    else:
+                        typed_settings[k] = v
+                setattr(config, key, typed_settings)
+            else:
+                setattr(config, key, value)
     
     filepath = get_config_file_path()
     try:

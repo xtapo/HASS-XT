@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.0] - 2026-06-30
+
+### Added
+- Tích hợp bộ lọc phát hiện chuyển động bằng OpenCV (thay thế cho bộ so sánh MD5 byte-exact cũ): 
+  - Tự động chuyển đổi ảnh sang mức xám (grayscale) và áp dụng làm mịn Gaussian Blur để loại bỏ nhiễu hạt (sensor noise).
+  - Tính toán sự sai lệch pixel (absolute difference) và số lượng contour chuyển động thực sự giữa ảnh hiện tại và ảnh thành công gần nhất.
+  - Tự động bỏ qua cuộc gọi API tới AI Proxy nếu tỷ lệ chuyển động thực tế thấp hơn ngưỡng đặt trước.
+- Thêm trường tùy chỉnh độ nhạy phát hiện chuyển động (Motion Threshold - % pixel thay đổi):
+  - Hỗ trợ cấu hình ngưỡng chuyển động mặc định trên toàn hệ thống (Web UI).
+  - Cho phép tùy biến ghi đè ngưỡng chuyển động riêng biệt cho mỗi Camera giám sát trên từng card cấu hình riêng.
+
+## [2.2.0] - 2026-06-30
+
+### Added
+- Bổ sung cấu hình riêng biệt cho từng Camera giám sát trực tiếp trên Web UI: Cho phép thiết lập Prompt gửi AI riêng, chu kỳ quét hình ảnh riêng (Scan Interval), và chỉ định Model Vision riêng biệt cho từng camera thay vì dùng chung cấu hình toàn cục.
+- Cải tiến giao diện cấu hình camera: Thay thế vùng nhập văn bản (textarea) thô bằng danh sách các Card camera thông minh dạng accordion có thể thu gọn/mở rộng trực quan, hỗ trợ nút xóa và nút cài đặt nhanh.
+- Tích hợp thêm hộp thoại nhập mã thực thể camera thủ công kết hợp song song với thanh lựa chọn nhanh.
+- Thiết lập luồng quét đa luồng song song độc lập cho từng camera dưới nền: Tránh việc các camera bị nghẽn API lẫn nhau hoặc camera chậm làm gián đoạn lịch trình của camera khác. Tích hợp cơ chế kiểm soát thread tránh xung đột quét trùng lặp trên cùng một camera.
+
 ## [2.1.0] - 2026-06-30
 
 ### Added
