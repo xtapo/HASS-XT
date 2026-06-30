@@ -27,6 +27,6 @@ COPY run.sh /app/run.sh
 
 RUN chmod +x /app/run.sh
 
-EXPOSE 8000
+EXPOSE 1237
 
 CMD ["/app/run.sh"]

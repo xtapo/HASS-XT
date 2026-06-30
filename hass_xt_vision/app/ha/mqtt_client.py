@@ -1,17 +1,16 @@
 import os
 import json
 import time
-import cv2
 import paho.mqtt.client as mqtt
 from typing import Dict, Any, List
 
 class HAMQTTClient:
-    def __init__(self, host: str, port: int, user: str = "", password: str = "", device_name: str = "hass_xt_camera"):
+    def __init__(self, host: str, port: int, user: str = "", password: str = "", prefix: str = "ai_vision"):
         self.host = host.strip() if host else "core-mosquitto"
         self.port = port
         self.user = user.strip() if user else ""
         self.password = password.strip() if password else ""
-        self.device_name = device_name
+        self.prefix = prefix.strip() if prefix else "ai_vision"
         self.connected = False
         self.status_text = "Disconnected"
         self.client = None
@@ -21,7 +20,7 @@ class HAMQTTClient:
         try:
             self.status_text = "Connecting..."
             print(f"[MQTT] Connecting to broker {self.host}:{self.port} (user: '{self.user}')...")
-            client_id = f"hass_xt_{int(time.time())}"
+            client_id = f"hass_xt_describer_{int(time.time())}"
             
             try:
                 self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id)
@@ -49,7 +48,7 @@ class HAMQTTClient:
             self.connected = True
             self.status_text = "Connected"
             try:
-                self._publish_discovery_configs()
+                self.publish_discovery_for_all()
             except Exception as e:
                 print(f"[MQTT] Error publishing discovery configs: {e}")
         else:
@@ -62,8 +61,8 @@ class HAMQTTClient:
                 self.status_text = f"Refused (Code {code})"
             print(f"[MQTT] Connection rejected by {self.host}: {self.status_text}")
             
-            # Smart fallback to internal HA broker if running as HA Add-on
-            if self.host != "core-mosquitto" and (os.path.exists("/data/options.json") or os.path.exists("/data")):
+            # Fallback to internal HA broker if running as HA Add-on
+            if self.host != "core-mosquitto" and (os.path.exists("/data") or os.path.exists("/data/describer_config.json")):
                 print("[MQTT] Triggering automatic fallback to internal HA broker 'core-mosquitto'...")
                 self.host = "core-mosquitto"
                 self.start()
@@ -75,81 +74,76 @@ class HAMQTTClient:
         if code != 0 and self.status_text == "Connected":
             self.status_text = "Disconnected"
 
-    def _publish_discovery_configs(self):
+    def _get_slug(self, entity_id: str) -> str:
+        return entity_id.replace(".", "_")
+
+    def publish_sensor_discovery(self, entity_id: str):
         if not self.client or not self.connected:
             return
 
-        device_info = {
-            "identifiers": [self.device_name],
-            "name": "HASS-XT AI Camera",
-            "model": "AI Vision Engine v1.0",
-            "manufacturer": "HASS-XT"
+        entity_slug = self._get_slug(entity_id)
+        # Clean title for entity (e.g. Front Door if entity_id is camera.front_door)
+        clean_name = entity_id.split(".")[-1].replace("_", " ").title()
+        
+        discovery_topic = f"homeassistant/sensor/{self.prefix}_{entity_slug}/config"
+        
+        discovery_payload = {
+            "name": f"{self.prefix.upper()} {clean_name}",
+            "unique_id": f"{self.prefix}_{entity_slug}",
+            "state_topic": f"{self.prefix}/{entity_slug}/state",
+            "json_attributes_topic": f"{self.prefix}/{entity_slug}/attributes",
+            "icon": "mdi:comment-eye-outline",
+            "value_template": "{{ value }}",
+            "device": {
+                "identifiers": [f"{self.prefix}_describer_device"],
+                "name": "AI Vision Entity Describer",
+                "model": "AI Vision Describer v2.0",
+                "manufacturer": "HASS-XT"
+            }
         }
+        
+        print(f"[MQTT] Publishing discovery config to {discovery_topic}")
+        self.client.publish(discovery_topic, json.dumps(discovery_payload), retain=True)
 
-        # 1. Motion Binary Sensor Discovery
-        motion_config = {
-            "name": "AI Camera Motion",
-            "unique_id": f"{self.device_name}_motion",
-            "state_topic": f"hass_xt/{self.device_name}/motion/state",
-            "device_class": "motion",
-            "payload_on": "ON",
-            "payload_off": "OFF",
-            "device": device_info
-        }
-        self.client.publish(f"homeassistant/binary_sensor/{self.device_name}/motion/config", json.dumps(motion_config), retain=True)
+    def publish_discovery_for_all(self):
+        from app.config import config
+        for entity_id in config.camera_entities:
+            self.publish_sensor_discovery(entity_id)
 
-        # 2. Person Detected Binary Sensor Discovery
-        person_config = {
-            "name": "AI Camera Person Detected",
-            "unique_id": f"{self.device_name}_person",
-            "state_topic": f"hass_xt/{self.device_name}/person/state",
-            "device_class": "occupancy",
-            "payload_on": "ON",
-            "payload_off": "OFF",
-            "device": device_info
-        }
-        self.client.publish(f"homeassistant/binary_sensor/{self.device_name}/person/config", json.dumps(person_config), retain=True)
-
-        # 3. Detected Objects Counter Sensor Discovery
-        count_config = {
-            "name": "AI Camera Object Count",
-            "unique_id": f"{self.device_name}_count",
-            "state_topic": f"hass_xt/{self.device_name}/count/state",
-            "unit_of_measurement": "objects",
-            "icon": "mdi:eye-outline",
-            "device": device_info
-        }
-        self.client.publish(f"homeassistant/sensor/{self.device_name}/count/config", json.dumps(count_config), retain=True)
-
-        # 4. Camera Entity Discovery (Image/Snapshot)
-        camera_config = {
-            "name": "AI Camera Snapshot",
-            "unique_id": f"{self.device_name}_snapshot",
-            "topic": f"hass_xt/{self.device_name}/snapshot",
-            "device": device_info
-        }
-        self.client.publish(f"homeassistant/camera/{self.device_name}/snapshot/config", json.dumps(camera_config), retain=True)
-
-        print("[MQTT] Home Assistant Discovery configurations published.")
-
-    def update_states(self, motion_detected: bool, detections: List[Dict[str, Any]], frame=None):
-        if not self.connected or not self.client:
+    def update_sensor_state(self, entity_id: str, description: str, timestamp: str, status: str, error_message: str = ""):
+        if not self.client or not self.connected:
+            print("[MQTT] Cannot publish state. MQTT client not connected.")
             return
 
-        motion_payload = "ON" if motion_detected else "OFF"
-        self.client.publish(f"hass_xt/{self.device_name}/motion/state", motion_payload)
+        # Ensure discovery config is sent first
+        self.publish_sensor_discovery(entity_id)
 
-        person_detected = any(d["class"] == "person" for d in detections)
-        person_payload = "ON" if person_detected else "OFF"
-        self.client.publish(f"hass_xt/{self.device_name}/person/state", person_payload)
+        entity_slug = self._get_slug(entity_id)
+        
+        # State: Truncate to 250 characters to avoid Home Assistant state limit of 255 chars
+        state_payload = description[:250] if description else "Unknown/No description"
+        if description and len(description) > 250:
+            state_payload = description[:247] + "..."
 
-        self.client.publish(f"hass_xt/{self.device_name}/count/state", str(len(detections)))
+        if status == "error":
+            state_payload = f"Error: {error_message}"[:250]
 
-        # Publish frame snapshot if motion or person detected
-        if (motion_detected or person_detected) and frame is not None:
-            ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-            if ret:
-                self.client.publish(f"hass_xt/{self.device_name}/snapshot", jpeg.tobytes())
+        state_topic = f"{self.prefix}/{entity_slug}/state"
+        attributes_topic = f"{self.prefix}/{entity_slug}/attributes"
+
+        # Attributes: full description + metadata
+        attributes_payload = {
+            "full_description": description if description else "",
+            "timestamp": timestamp,
+            "entity_id": entity_id,
+            "status": status,
+            "error_message": error_message
+        }
+
+        print(f"[MQTT] Publishing state to {state_topic}")
+        self.client.publish(state_topic, state_payload, retain=True)
+        print(f"[MQTT] Publishing attributes to {attributes_topic}")
+        self.client.publish(attributes_topic, json.dumps(attributes_payload), retain=True)
 
     def stop(self):
         self.connected = False
@@ -159,3 +153,4 @@ class HAMQTTClient:
                 self.client.disconnect()
             except Exception:
                 pass
+            self.client = None

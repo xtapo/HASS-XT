@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.0] - 2026-06-30
+
+### Added
+- Tích hợp tính năng chẩn đoán kết nối toàn diện: Kiểm tra đồng thời kết nối Home Assistant API, AI Proxy (Vision API), và MQTT Broker từ Web UI, hiển thị kết quả chẩn đoán chi tiết và tô màu trạng thái trực quan bên cạnh các trường nhập dữ liệu.
+- Bổ sung công cụ kiểm tra độc lập và chi tiết kết nối API tới Telegram Bot.
+- Tích hợp thông báo qua Telegram: Tự động gửi ảnh chụp thực thể (photo) kèm mô tả chi tiết của AI dưới dạng chú thích (caption) tới Chat ID nhóm hoặc cá nhân của người dùng ngay sau khi phân tích thành công. Dự phòng gửi tin nhắn văn bản thuần túy nếu gửi ảnh thất bại.
+- Định dạng danh sách lựa chọn nhanh thực thể có sẵn từ Home Assistant theo phong cách trực quan: `entity_id · friendly_name · domain`.
+
+### Optimized
+- Thêm bộ lọc trùng lặp ảnh (MD5 Image Hash Compare): Tự động tính toán mã băm ảnh chụp camera, nếu ảnh không thay đổi so với lần phân tích thành công trước đó thì tự động bỏ qua cuộc gọi API tới AI Proxy, giảm thiểu đáng kể chi phí token AI và tránh tạo các bản ghi lịch sử trùng lặp vô ích. Cho phép bỏ qua bộ lọc này khi người dùng thực hiện chạy quét thủ công (Force Scan).
+
+### Changed
+- Nâng cấp Addon thành **AI Vision Entity Describer Addon** phiên bản v2.1.0, chạy uvicorn trên cổng mới `1237`.
+
+---
+
 ## [1.2.2] - 2026-06-30
 
 ### Fixed

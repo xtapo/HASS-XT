@@ -29,6 +29,8 @@ ENV/
 .env.local
 options.json
 data/
+describer_config.json
+*.sqlite
 
 # IDE & Editors
 .vscode/

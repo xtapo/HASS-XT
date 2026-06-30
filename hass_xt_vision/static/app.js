@@ -1,168 +1,650 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const liveStream = document.getElementById("live-stream");
-    const versionBadge = document.getElementById("version-badge");
-    const mqttBadge = document.getElementById("mqtt-badge");
-    const fpsBadge = document.getElementById("fps-badge");
-    const motionBadge = document.getElementById("motion-badge");
-    const countValue = document.getElementById("count-value");
-    const personStatus = document.getElementById("person-status");
-    const detectionsList = document.getElementById("detections-list");
+// AI Vision Entity Describer Frontend Controller
 
-    const rtspUrlInput = document.getElementById("rtsp-url-input");
-    const mqttHostInput = document.getElementById("mqtt-host-input");
-    const mqttPortInput = document.getElementById("mqtt-port-input");
-    const mqttUserInput = document.getElementById("mqtt-user-input");
-    const mqttPassInput = document.getElementById("mqtt-pass-input");
+// DOM Elements
+const haUrlInput = document.getElementById('ha-url-input');
+const haTokenInput = document.getElementById('ha-token-input');
+const cameraEntitiesInput = document.getElementById('camera-entities-input');
+const scanIntervalInput = document.getElementById('scan-interval-input');
+const aiBaseUrlInput = document.getElementById('ai-base-url-input');
+const aiKeyInput = document.getElementById('ai-key-input');
+const aiModelInput = document.getElementById('ai-model-input');
+const aiPromptInput = document.getElementById('ai-prompt-input');
+const mqttHostInput = document.getElementById('mqtt-host-input');
+const mqttPortInput = document.getElementById('mqtt-port-input');
+const mqttPrefixInput = document.getElementById('mqtt-prefix-input');
+const mqttUserInput = document.getElementById('mqtt-user-input');
+const mqttPassInput = document.getElementById('mqtt-pass-input');
 
-    const sensitivityInput = document.getElementById("sensitivity-input");
-    const sensitivityVal = document.getElementById("sensitivity-val");
-    const confidenceInput = document.getElementById("confidence-input");
-    const confidenceVal = document.getElementById("confidence-val");
-    const saveBtn = document.getElementById("save-btn");
+const testHaBtn = document.getElementById('test-ha-btn');
+const loadHaEntitiesBtn = document.getElementById('load-ha-entities-btn');
+const haEntitiesStatus = document.getElementById('ha-entities-status');
+const entityHelper = document.getElementById('entity-helper');
+const entityPicker = document.getElementById('entity-picker');
 
-    function getBaseUrl() {
-        let path = window.location.pathname;
-        if (!path.endsWith('/')) {
-            path += '/';
-        }
-        return path;
-    }
+const testAllBtn = document.getElementById('test-all-btn');
+const aiStatusText = document.getElementById('ai-status-text');
+const mqttStatusText = document.getElementById('mqtt-status-text');
+const tgTokenInput = document.getElementById('tg-token-input');
+const tgChatInput = document.getElementById('tg-chat-input');
+const tgStatusText = document.getElementById('tg-status-text');
 
-    const baseUrl = getBaseUrl();
+const saveBtn = document.getElementById('save-btn');
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+const manualScanSelect = document.getElementById('manual-scan-select');
+const scanNowBtn = document.getElementById('scan-now-btn');
+const historyList = document.getElementById('history-list');
+const detailView = document.getElementById('detail-view');
 
-    // Fast image stream updating compatible with HA Ingress
-    let streamActive = true;
-    function updateLiveStream() {
-        if (!streamActive || !liveStream) return;
-        const img = new Image();
-        img.onload = () => {
-            liveStream.src = img.src;
-            setTimeout(updateLiveStream, 66); // ~15 FPS
-        };
-        img.onerror = () => {
-            setTimeout(updateLiveStream, 500);
-        };
-        img.src = baseUrl + "api/snapshot?t=" + Date.now();
-    }
-    updateLiveStream();
+const mqttBadge = document.getElementById('mqtt-badge');
+const statusBadge = document.getElementById('status-badge');
+const toastNotification = document.getElementById('notification-toast');
 
-    // Dynamic slider label update
-    sensitivityInput.addEventListener("input", (e) => {
-        sensitivityVal.textContent = e.target.value;
-    });
+// Global State
+let currentConfig = {};
+let historyEntries = [];
+let selectedEntryId = null;
 
-    confidenceInput.addEventListener("input", (e) => {
-        confidenceVal.textContent = parseFloat(e.target.value).toFixed(2);
-    });
-
-    // Load initial config
-    async function loadConfig() {
-        try {
-            const res = await fetch(baseUrl + "api/config");
-            const data = await res.json();
-            if (rtspUrlInput) rtspUrlInput.value = data.rtsp_url || "";
-            if (mqttHostInput) mqttHostInput.value = data.mqtt_host || "";
-            if (mqttPortInput) mqttPortInput.value = data.mqtt_port || 1883;
-            if (mqttUserInput) mqttUserInput.value = data.mqtt_user || "";
-            if (mqttPassInput) mqttPassInput.value = data.mqtt_password || "";
-
-            sensitivityInput.value = data.motion_sensitivity;
-            sensitivityVal.textContent = data.motion_sensitivity;
-            confidenceInput.value = data.ai_confidence;
-            confidenceVal.textContent = parseFloat(data.ai_confidence).toFixed(2);
-        } catch (err) {
-            console.error("Error loading config:", err);
-        }
-    }
-
-    // Save config
-    saveBtn.addEventListener("click", async () => {
-        try {
-            const payload = {
-                rtsp_url: rtspUrlInput.value.trim(),
-                mqtt_host: mqttHostInput.value.trim(),
-                mqtt_port: parseInt(mqttPortInput.value) || 1883,
-                mqtt_user: mqttUserInput.value.trim(),
-                mqtt_password: mqttPassInput.value.trim(),
-                motion_sensitivity: parseInt(sensitivityInput.value),
-                ai_confidence: parseFloat(confidenceInput.value)
-            };
-
-            saveBtn.textContent = "Đang áp dụng...";
-            saveBtn.disabled = true;
-
-            const res = await fetch(baseUrl + "api/config", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            alert("Đã lưu và áp dụng cấu hình mới thành công!");
-        } catch (err) {
-            alert("Lỗi khi lưu cấu hình!");
-        } finally {
-            saveBtn.textContent = "Lưu Cấu Hình Tức Thời";
-            saveBtn.disabled = false;
-        }
-    });
-
-    // Poll telemetry status
-    async function updateStatus() {
-        try {
-            const res = await fetch(baseUrl + "api/status");
-            const data = await res.json();
-
-            // Version
-            if (versionBadge && data.version) {
-                versionBadge.textContent = "v" + data.version;
-            }
-
-            // MQTT status
-            if (data.mqtt_connected) {
-                mqttBadge.textContent = "MQTT: Connected";
-                mqttBadge.className = "badge badge-connected";
-            } else {
-                const text = data.mqtt_status_text || "Disconnected";
-                mqttBadge.textContent = "MQTT: " + text;
-                mqttBadge.className = "badge badge-disconnected";
-            }
-
-            // FPS
-            fpsBadge.textContent = `FPS: ${data.fps}`;
-
-            // Motion Badge
-            if (data.motion_detected) {
-                motionBadge.textContent = "CẢNH BÁO CHUYỂN ĐỘNG";
-                motionBadge.className = "badge badge-alert";
-            } else {
-                motionBadge.textContent = "KÍNH TRONG";
-                motionBadge.className = "badge badge-clear";
-            }
-
-            // Object Count
-            countValue.textContent = data.detections_count;
-
-            // Person Status
-            const hasPerson = data.detections.some(d => d.class === "person");
-            personStatus.textContent = hasPerson ? "Có người!" : "Không";
-            personStatus.style.color = hasPerson ? "#ef4444" : "#38bdf8";
-
-            // Detections List
-            if (data.detections.length === 0) {
-                detectionsList.innerHTML = '<p class="empty-msg">Chưa phát hiện chuyển động nào...</p>';
-            } else {
-                detectionsList.innerHTML = data.detections.map(d => `
-                    <div class="detection-item">
-                        <span><strong>${d.class.toUpperCase()}</strong></span>
-                        <span class="badge badge-info">${Math.round(d.confidence * 100)}%</span>
-                    </div>
-                `).join('');
-            }
-        } catch (err) {
-            console.error("Error polling status:", err);
-        }
-    }
-
-    loadConfig();
-    setInterval(updateStatus, 1000);
+// Initialization
+document.addEventListener('DOMContentLoaded', () => {
+    fetchConfig();
+    fetchStatus();
+    fetchHistory();
+    setupEventListeners();
+    
+    // Periodically poll status and history
+    setInterval(fetchStatus, 5000);
+    setInterval(fetchHistory, 10000);
 });
+
+// Setup Listeners
+function setupEventListeners() {
+    saveBtn.addEventListener('click', saveConfig);
+    clearHistoryBtn.addEventListener('click', clearHistory);
+    scanNowBtn.addEventListener('click', runManualScan);
+    testHaBtn.addEventListener('click', testHAConnection);
+    testAllBtn.addEventListener('click', testAllConnections);
+    loadHaEntitiesBtn.addEventListener('click', queryHAEntities);
+    
+    // Picker listener to append entity
+    entityPicker.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        
+        let currentText = cameraEntitiesInput.value.trim();
+        const entitiesList = currentText ? currentText.split('\n').map(x => x.trim()) : [];
+        
+        if (!entitiesList.includes(val)) {
+            entitiesList.push(val);
+            cameraEntitiesInput.value = entitiesList.join('\n');
+            showToast(`Đã thêm ${val} vào danh sách.`);
+            updateManualTriggerDropdown();
+        } else {
+            showToast(`${val} đã tồn tại trong danh sách.`, true);
+        }
+        
+        entityPicker.value = ''; // Reset picker selection
+    });
+}
+
+// Show custom toast notification
+function showToast(message, isError = false) {
+    toastNotification.textContent = message;
+    toastNotification.className = 'toast';
+    if (isError) {
+        toastNotification.style.borderLeft = '4px solid var(--danger)';
+    } else {
+        toastNotification.style.borderLeft = '4px solid var(--accent)';
+    }
+    toastNotification.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toastNotification.classList.add('hidden');
+    }, 3500);
+}
+
+// Fetch configuration from FastAPI
+async function fetchConfig() {
+    try {
+        const response = await fetch('/api/config');
+        if (!response.ok) throw new Error('Failed to load configuration');
+        
+        const data = await response.json();
+        currentConfig = data;
+        
+        // Populate inputs
+        haUrlInput.value = data.ha_url || '';
+        haTokenInput.value = data.ha_token || '';
+        cameraEntitiesInput.value = (data.camera_entities || []).join('\n');
+        scanIntervalInput.value = data.scan_interval || 30;
+        aiBaseUrlInput.value = data.ai_proxy_base_url || '';
+        aiKeyInput.value = data.ai_api_key || '';
+        aiModelInput.value = data.ai_model || '';
+        aiPromptInput.value = data.ai_prompt || 'Hãy mô tả chi tiết hình ảnh này bằng tiếng Việt.';
+        mqttHostInput.value = data.mqtt_host || 'core-mosquitto';
+        mqttPortInput.value = data.mqtt_port || 1883;
+        mqttPrefixInput.value = data.mqtt_prefix || 'ai_vision';
+        mqttUserInput.value = data.mqtt_user || '';
+        mqttPassInput.value = data.mqtt_password || '';
+        tgTokenInput.value = data.telegram_bot_token || '';
+        tgChatInput.value = data.telegram_chat_id || '';
+        
+        // Update manual select dropdown list
+        updateManualTriggerDropdown();
+        
+        // Auto-query HA entities list if HA URL is valid to verify token
+        if (data.ha_url) {
+            queryHAEntities(false);
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Lỗi tải cấu hình!', true);
+    }
+}
+
+// Save configuration to FastAPI
+async function saveConfig() {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Đang lưu...';
+    
+    const entitiesText = cameraEntitiesInput.value;
+    const entitiesArray = entitiesText.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+        
+    const payload = {
+        ha_url: haUrlInput.value.trim(),
+        ha_token: haTokenInput.value.trim(),
+        camera_entities: entitiesArray,
+        scan_interval: parseInt(scanIntervalInput.value) || 30,
+        ai_proxy_base_url: aiBaseUrlInput.value.trim(),
+        ai_api_key: aiKeyInput.value.trim(),
+        ai_model: aiModelInput.value.trim(),
+        mqtt_host: mqttHostInput.value.trim(),
+        mqtt_port: parseInt(mqttPortInput.value) || 1883,
+        mqtt_prefix: mqttPrefixInput.value.trim(),
+        mqtt_user: mqttUserInput.value.trim(),
+        mqtt_password: mqttPassInput.value.trim(),
+        ai_prompt: aiPromptInput.value.trim(),
+        telegram_bot_token: tgTokenInput.value.trim(),
+        telegram_chat_id: tgChatInput.value.trim()
+    };
+    
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error('Save failed');
+        
+        showToast('Cấu hình đã lưu thành công!');
+        fetchConfig(); // Reload
+        fetchStatus();
+    } catch (error) {
+        console.error(error);
+        showToast('Không thể lưu cấu hình!', true);
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Lưu Cấu Hình';
+    }
+}
+
+// Fetch general status info
+async function fetchStatus() {
+    try {
+        const response = await fetch('/api/status');
+        if (!response.ok) throw new Error('Status check failed');
+        
+        const data = await response.json();
+        
+        // MQTT status badge update
+        mqttBadge.textContent = `MQTT: ${data.mqtt_status_text}`;
+        mqttBadge.className = 'badge';
+        if (data.mqtt_connected) {
+            mqttBadge.classList.add('badge-success');
+        } else if (data.mqtt_status_text.startsWith('Connecting')) {
+            mqttBadge.classList.add('badge-info');
+        } else {
+            mqttBadge.classList.add('badge-disconnected');
+        }
+        
+        statusBadge.textContent = 'API: Online';
+        statusBadge.className = 'badge badge-success';
+    } catch (error) {
+        statusBadge.textContent = 'API: Offline';
+        statusBadge.className = 'badge badge-danger';
+    }
+}
+
+// Fetch SQLite history entries
+async function fetchHistory() {
+    try {
+        const response = await fetch('/api/history?limit=40');
+        if (!response.ok) throw new Error('Failed to load history');
+        
+        const data = await response.json();
+        historyEntries = data;
+        
+        renderHistoryList();
+    } catch (error) {
+        console.error(error);
+        historyList.innerHTML = `<p class="empty-msg text-danger">Lỗi tải dữ liệu lịch sử.</p>`;
+    }
+}
+
+// Render the scrollable log history column
+function renderHistoryList() {
+    if (historyEntries.length === 0) {
+        historyList.innerHTML = `<p class="empty-msg">Chưa có bản ghi lịch sử vision nào.</p>`;
+        return;
+    }
+    
+    let html = '';
+    historyEntries.forEach(entry => {
+        const isActive = selectedEntryId === entry.id ? 'active' : '';
+        const isSuccess = entry.status === 'success';
+        const badgeClass = isSuccess ? 'badge-success' : 'badge-danger';
+        const badgeText = isSuccess ? 'Thành công' : 'Lỗi';
+        
+        // Resolve image source
+        let thumbContent = `<span class="thumb-placeholder">📷</span>`;
+        if (entry.image_filename && isSuccess) {
+            thumbContent = `<img src="/images/${entry.image_filename}" class="history-thumb" alt="Thumbnail" onerror="this.outerHTML='<span class=\"thumb-placeholder\">📷</span>'">`;
+        } else if (!isSuccess) {
+            thumbContent = `<span class="thumb-placeholder text-danger">⚠️</span>`;
+        }
+        
+        const descPreview = entry.description ? entry.description : (entry.error_message || 'Không có mô tả');
+        
+        html += `
+            <div class="history-item ${isActive}" onclick="selectHistoryEntry(${entry.id})">
+                <div class="history-thumb-wrapper">
+                    ${thumbContent}
+                </div>
+                <div class="history-item-body">
+                    <div class="history-item-meta">
+                        <span class="history-item-title">${entry.entity_id}</span>
+                        <span class="badge ${badgeClass} btn-sm" style="font-size: 0.6rem; padding: 0.05rem 0.25rem;">${badgeText}</span>
+                    </div>
+                    <p class="history-item-desc">${descPreview}</p>
+                    <span class="history-item-time">${entry.timestamp}</span>
+                </div>
+                <button class="btn btn-danger btn-sm" style="padding: 0.25rem 0.4rem; margin: auto 0.5rem auto 0; border-radius: 4px;" onclick="deleteHistoryEntry(${entry.id}, event)">🗑️</button>
+            </div>
+        `;
+    });
+    
+    historyList.innerHTML = html;
+}
+
+// Select details of an entry to expand
+function selectHistoryEntry(id) {
+    selectedEntryId = id;
+    
+    // Highlight list active
+    const items = historyList.querySelectorAll('.history-item');
+    items.forEach((item, index) => {
+        if (historyEntries[index] && historyEntries[index].id === id) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    const entry = historyEntries.find(e => e.id === id);
+    if (!entry) return;
+    
+    const isSuccess = entry.status === 'success';
+    const statusBadgeHtml = isSuccess 
+        ? `<span class="badge badge-success">Thành công</span>` 
+        : `<span class="badge badge-danger">Lỗi phân tích</span>`;
+        
+    let imgHtml = `
+        <div class="empty-detail-state">
+            <span class="empty-icon" style="font-size: 4rem;">⚠️</span>
+            <p style="color: var(--danger)">Không có hình ảnh do tiến trình lỗi.</p>
+        </div>
+    `;
+    
+    if (entry.image_filename) {
+        imgHtml = `<img src="/images/${entry.image_filename}" class="detail-image" alt="Captured Vision Image" />`;
+    }
+    
+    const descContent = isSuccess 
+        ? entry.description 
+        : `Lỗi mô tả:\n${entry.error_message || 'Lỗi không xác định khi kết nối API.'}`;
+
+    const copyBtnHtml = isSuccess 
+        ? `<button class="btn btn-secondary btn-sm" onclick="copyTextToClipboard(\`${entry.description.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Sao chép mô tả</button>` 
+        : '';
+
+    detailView.className = 'detail-view-container';
+    detailView.innerHTML = `
+        <div class="detail-image-card">
+            ${imgHtml}
+        </div>
+        
+        <div class="detail-meta-box">
+            <div class="detail-meta-item">
+                <div class="detail-meta-label">Thực thể (Entity)</div>
+                <div class="detail-meta-value">${entry.entity_id}</div>
+            </div>
+            <div class="detail-meta-item">
+                <div class="detail-meta-label">Thời gian</div>
+                <div class="detail-meta-value">${entry.timestamp}</div>
+            </div>
+            <div class="detail-meta-item">
+                <div class="detail-meta-label">Trạng thái</div>
+                <div class="detail-meta-value" style="margin-top: 0.25rem;">${statusBadgeHtml}</div>
+            </div>
+        </div>
+        
+        <div class="detail-desc-card">
+            <div class="desc-card-header">
+                <h3>Nội Dung Mô Tả Từ AI</h3>
+                ${copyBtnHtml}
+            </div>
+            <div class="detail-desc-body">${descContent}</div>
+        </div>
+    `;
+}
+
+// Utility to copy AI description
+function copyTextToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Đã sao chép mô tả vào bộ nhớ tạm!');
+    }).catch(err => {
+        console.error('Could not copy text: ', err);
+    });
+}
+
+// Delete historical record
+async function deleteHistoryEntry(id, event) {
+    event.stopPropagation(); // Avoid triggering details click selection
+    
+    if (!confirm(`Bạn có chắc chắn muốn xóa bản ghi này?`)) return;
+    
+    try {
+        const response = await fetch(`/api/history/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Delete failed');
+        
+        showToast('Đã xóa bản ghi.');
+        
+        if (selectedEntryId === id) {
+            selectedEntryId = null;
+            detailView.className = 'detail-view-container empty';
+            detailView.innerHTML = `
+                <div class="empty-detail-state">
+                    <span class="empty-icon">🖼️</span>
+                    <p>Chọn một ảnh trong cột Lịch Sử để xem chi tiết mô tả và hình ảnh phóng to.</p>
+                </div>
+            `;
+        }
+        
+        fetchHistory();
+    } catch (error) {
+        console.error(error);
+        showToast('Không thể xóa bản ghi!', true);
+    }
+}
+
+// Clear all history rows
+async function clearHistory() {
+    if (!confirm('BẠN CÓ CHẮC CHẮN muốn XÓA TOÀN BỘ lịch sử lưu trữ? Hành động này không thể hoàn tác.')) return;
+    
+    try {
+        const response = await fetch('/api/history/clear', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) throw new Error('Clear failed');
+        
+        showToast('Đã xóa toàn bộ lịch sử.');
+        selectedEntryId = null;
+        detailView.className = 'detail-view-container empty';
+        detailView.innerHTML = `
+            <div class="empty-detail-state">
+                <span class="empty-icon">🖼️</span>
+                <p>Chọn một ảnh trong cột Lịch Sử để xem chi tiết mô tả và hình ảnh phóng to.</p>
+            </div>
+        `;
+        
+        fetchHistory();
+    } catch (error) {
+        console.error(error);
+        showToast('Lỗi xóa lịch sử!', true);
+    }
+}
+
+// Query HA entities to simplify adding camera entities
+async function queryHAEntities(triggerToast = true) {
+    const haUrl = haUrlInput.value.trim();
+    const haToken = haTokenInput.value.trim();
+    
+    loadHaEntitiesBtn.disabled = true;
+    loadHaEntitiesBtn.textContent = 'Đang quét...';
+    haEntitiesStatus.textContent = 'Đang tìm kiếm camera...';
+    
+    try {
+        let apiUrl = '/api/camera_entities';
+        if (haUrl) {
+            const params = new URLSearchParams({ ha_url: haUrl, ha_token: haToken });
+            apiUrl += `?${params.toString()}`;
+        }
+        
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error('Failed to fetch entities');
+        
+        const entities = await response.json();
+        
+        if (entities.length === 0) {
+            haEntitiesStatus.textContent = 'Không tìm thấy camera/entity nào.';
+            entityHelper.classList.add('hidden');
+            if (triggerToast) showToast('Không tìm thấy camera hoặc entity có ảnh nào!', true);
+            return;
+        }
+        
+        // Populate Picker dropdown
+        let pickerHtml = '<option value="">-- Chọn camera/image/entity có ảnh --</option>';
+        entities.forEach(ent => {
+            const domain = ent.entity_id.split('.')[0];
+            pickerHtml += `<option value="${ent.entity_id}">${ent.entity_id} · ${ent.friendly_name} · ${domain}</option>`;
+        });
+        entityPicker.innerHTML = pickerHtml;
+        entityHelper.classList.remove('hidden');
+        
+        haEntitiesStatus.textContent = `Đã tìm thấy ${entities.length} thực thể.`;
+        if (triggerToast) showToast(`Quét thành công! Tìm thấy ${entities.length} thực thể.`);
+    } catch (error) {
+        console.error(error);
+        haEntitiesStatus.textContent = 'Lỗi kết nối HA API.';
+        entityHelper.classList.add('hidden');
+        if (triggerToast) showToast('Quét thực thể thất bại! Vui lòng kiểm tra lại URL và Token HA.', true);
+    } finally {
+        loadHaEntitiesBtn.disabled = false;
+        loadHaEntitiesBtn.textContent = 'Tìm kiếm Entity từ HA';
+    }
+}
+
+// Sync the quick run description drop down list
+function updateManualTriggerDropdown() {
+    const textVal = cameraEntitiesInput.value;
+    const entities = textVal.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+        
+    let html = '<option value="">-- Chọn Camera --</option>';
+    entities.forEach(ent => {
+        html += `<option value="${ent}">${ent}</option>`;
+    });
+    manualScanSelect.innerHTML = html;
+}
+
+// Run single manual vision description cycle
+async function runManualScan() {
+    const entityId = manualScanSelect.value;
+    if (!entityId) {
+        showToast('Vui lòng chọn một thực thể trước!', true);
+        return;
+    }
+    
+    scanNowBtn.disabled = true;
+    scanNowBtn.textContent = 'Đang chạy...';
+    showToast(`Đang chạy chụp & mô tả cho ${entityId}...`);
+    
+    try {
+        const response = await fetch('/api/scan_now', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entity_id: entityId })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Mô tả thất bại');
+        }
+        
+        showToast('Mô tả thành công!');
+        await fetchHistory();
+        
+        // Auto select the newly created item
+        if (historyEntries.length > 0) {
+            selectHistoryEntry(historyEntries[0].id);
+        }
+    } catch (error) {
+        console.error(error);
+        showToast(`Quá trình lỗi: ${error.message}`, true);
+        fetchHistory(); // Reload history anyway to show error row
+    } finally {
+        scanNowBtn.disabled = false;
+        scanNowBtn.textContent = 'Chạy';
+    }
+}
+
+// Test Home Assistant API connection and return detailed error explanation
+async function testHAConnection() {
+    const haUrl = haUrlInput.value.trim();
+    const haToken = haTokenInput.value.trim();
+    
+    if (!haUrl) {
+        showToast('Vui lòng nhập Home Assistant URL!', true);
+        return;
+    }
+    
+    testHaBtn.disabled = true;
+    testHaBtn.textContent = 'Đang thử...';
+    haEntitiesStatus.textContent = 'Đang kiểm tra kết nối tới Home Assistant...';
+    haEntitiesStatus.className = 'small-text text-secondary';
+    
+    try {
+        const response = await fetch('/api/test_ha', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ha_url: haUrl, ha_token: haToken })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast(data.message);
+            haEntitiesStatus.textContent = data.message;
+            haEntitiesStatus.className = 'small-text text-success';
+        } else {
+            showToast(data.message || 'Lỗi kết nối!', true);
+            haEntitiesStatus.textContent = data.message || 'Lỗi kết nối!';
+            haEntitiesStatus.className = 'small-text text-danger';
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Không thể kết nối đến máy chủ addon!', true);
+        haEntitiesStatus.textContent = 'Không thể kết nối đến API addon.';
+        haEntitiesStatus.className = 'small-text text-danger';
+    } finally {
+        testHaBtn.disabled = false;
+        testHaBtn.textContent = 'Kiểm tra kết nối HA';
+    }
+}
+
+// Test all configured connections (HA, AI Proxy, MQTT) in parallel
+async function testAllConnections() {
+    const payload = {
+        ha_url: haUrlInput.value.trim(),
+        ha_token: haTokenInput.value.trim(),
+        ai_proxy_base_url: aiBaseUrlInput.value.trim(),
+        ai_api_key: aiKeyInput.value.trim(),
+        ai_model: aiModelInput.value.trim(),
+        mqtt_host: mqttHostInput.value.trim(),
+        mqtt_port: parseInt(mqttPortInput.value) || 1883,
+        mqtt_user: mqttUserInput.value.trim(),
+        mqtt_password: mqttPassInput.value.trim(),
+        telegram_bot_token: tgTokenInput.value.trim(),
+        telegram_chat_id: tgChatInput.value.trim()
+    };
+    
+    testAllBtn.disabled = true;
+    testAllBtn.textContent = 'Đang kiểm tra...';
+    
+    // Clear & set loading text for all status fields
+    haEntitiesStatus.textContent = 'Đang thử HA...';
+    haEntitiesStatus.className = 'small-text text-secondary';
+    aiStatusText.textContent = 'Đang thử AI Proxy...';
+    aiStatusText.className = 'small-text text-secondary';
+    mqttStatusText.textContent = 'Đang thử MQTT...';
+    mqttStatusText.className = 'small-text text-secondary';
+    tgStatusText.textContent = 'Đang thử Telegram...';
+    tgStatusText.className = 'small-text text-secondary';
+    
+    try {
+        const response = await fetch('/api/test_all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error('Yêu cầu chẩn đoán thất bại');
+        
+        const results = await response.json();
+        
+        // 1. Render HA Result
+        haEntitiesStatus.textContent = results.ha.message;
+        haEntitiesStatus.className = `small-text text-${results.ha.status === 'success' ? 'success' : 'danger'}`;
+        
+        // 2. Render AI Proxy Result
+        aiStatusText.textContent = results.ai.message;
+        aiStatusText.className = `small-text text-${results.ai.status === 'success' ? 'success' : 'danger'}`;
+        
+        // 3. Render MQTT Result
+        mqttStatusText.textContent = results.mqtt.message;
+        mqttStatusText.className = `small-text text-${results.mqtt.status === 'success' ? 'success' : 'danger'}`;
+        
+        // 4. Render Telegram Result
+        tgStatusText.textContent = results.telegram.message;
+        tgStatusText.className = `small-text text-${results.telegram.status === 'success' ? 'success' : 'danger'}`;
+        
+        const hasErrors = results.ha.status === 'error' || results.ai.status === 'error' || results.mqtt.status === 'error' || results.telegram.status === 'error';
+        if (hasErrors) {
+            showToast('Một số kết nối cấu hình gặp lỗi!', true);
+        } else {
+            showToast('Tất cả kết nối đã kiểm tra thành công!');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Không thể kết nối đến API kiểm thử!', true);
+        haEntitiesStatus.textContent = 'Lỗi chẩn đoán kết nối.';
+        haEntitiesStatus.className = 'small-text text-danger';
+        aiStatusText.textContent = 'Lỗi chẩn đoán kết nối.';
+        aiStatusText.className = 'small-text text-danger';
+        mqttStatusText.textContent = 'Lỗi chẩn đoán kết nối.';
+        mqttStatusText.className = 'small-text text-danger';
+        tgStatusText.textContent = 'Lỗi chẩn đoán kết nối.';
+        tgStatusText.className = 'small-text text-danger';
+    } finally {
+        testAllBtn.disabled = false;
+        testAllBtn.textContent = 'Kiểm tra kết nối';
+    }
+}

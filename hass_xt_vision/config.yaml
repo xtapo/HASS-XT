@@ -1,7 +1,7 @@
-name: "HASS-XT AI Vision"
-version: "1.2.2"
+name: "HASS-XT AI Vision Describer"
+version: "2.1.0"
 slug: "hass_xt_vision"
-description: "AI Motion Detection & Object Recognition Camera for Home Assistant"
+description: "AI Vision Entity Describer Addon: Describe HA cameras and entity pictures via AI proxy with MQTT auto-discovery"
 url: "https://github.com/xtapo/HASS-XT"
 arch:
   - aarch64
@@ -15,31 +15,18 @@ homeassistant_api: true
 services:
   - mqtt:need
 ingress: true
-ingress_port: 8000
+ingress_port: 1237
 panel_icon: mdi:camera-iris
-panel_title: "HASS-XT Vision"
+panel_title: "AI Vision Describer"
 ports:
-  8000/tcp: 8000
+  1237/tcp: 1237
 ports_description:
-  8000/tcp: Web Dashboard UI & Stream
+  1237/tcp: Web Configuration & History UI
 map:
   - addon_config:rw
   - config:rw
   - share:rw
-options:
-  rtsp_url: "rtsp://192.168.1.100:554/stream1"
-  mqtt_host: "core-mosquitto"
-  mqtt_port: 1883
-  mqtt_user: ""
-  mqtt_password: ""
-  motion_sensitivity: 25
-  ai_confidence: 0.5
-schema:
-  rtsp_url: str
-  mqtt_host: str
-  mqtt_port: int
-  mqtt_user: str?
-  mqtt_password: str?
-  motion_sensitivity: int
-  ai_confidence: float
+options: {}
+schema: {}
 image: "ghcr.io/xtapo/hass_xt_vision-{arch}"
+
