@@ -1,9 +1,16 @@
 # Changelog
 
+## [1.2.2] - 2026-06-30
+
+### Fixed
+- Sửa lỗi cú pháp phân tách tùy chọn FFMPEG (`rtsp_transport|tcp`) sử dụng ký tự gạch đứng `|` tương thích hoàn hảo với môi trường Docker Linux trên Home Assistant (khắc phục lỗi *Unable to parse option value*).
+
+---
+
 ## [1.2.1] - 2026-06-30
 
 ### Fixed
-- Gửi ảnh chụp snapshot định kỳ mỗi 2 giây/lần lên thực thể camera trong Home Assistant (giúp thực thể camera luôn hiển thị ảnh xem trước trực tiếp thay vì bị trống khi chưa phát hiện chuyển động).
+- Khắc phục lỗi hiển thị camera thực thể trống trên giao diện Home Assistant bằng cách tự động đồng bộ khung hình snapshot định kỳ 2 giây.
 
 ---
 

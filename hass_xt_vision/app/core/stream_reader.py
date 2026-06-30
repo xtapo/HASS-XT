@@ -5,7 +5,8 @@ import threading
 import numpy as np
 
 # Force FFMPEG TCP transport for RTSP streams (prevents UDP packet drops and connection failures)
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp;stimeout;5000000"
+# The separator for OPENCV_FFMPEG_CAPTURE_OPTIONS must be "|" (vertical bar) on Linux/Unix systems.
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport|tcp|stimeout|5000000"
 
 class StreamReader:
     def __init__(self, rtsp_url: str):

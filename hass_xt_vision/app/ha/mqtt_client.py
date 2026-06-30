@@ -15,7 +15,6 @@ class HAMQTTClient:
         self.connected = False
         self.status_text = "Disconnected"
         self.client = None
-        self.last_snapshot_time = 0.0
 
     def start(self):
         self.stop()
@@ -83,7 +82,7 @@ class HAMQTTClient:
         device_info = {
             "identifiers": [self.device_name],
             "name": "HASS-XT AI Camera",
-            "model": "AI Vision Engine v1.2",
+            "model": "AI Vision Engine v1.0",
             "manufacturer": "HASS-XT"
         }
 
@@ -137,7 +136,6 @@ class HAMQTTClient:
         if not self.connected or not self.client:
             return
 
-        now = time.time()
         motion_payload = "ON" if motion_detected else "OFF"
         self.client.publish(f"hass_xt/{self.device_name}/motion/state", motion_payload)
 
@@ -147,13 +145,8 @@ class HAMQTTClient:
 
         self.client.publish(f"hass_xt/{self.device_name}/count/state", str(len(detections)))
 
-        # Publish frame snapshot to HA Camera entity
-        # 1. Publish instantly on any motion or person detection
-        # 2. Otherwise, update at 0.5 Hz (every 2.0s) so the camera preview is never blank
-        should_publish = (motion_detected or person_detected) or (now - self.last_snapshot_time >= 2.0)
-        
-        if should_publish and frame is not None:
-            self.last_snapshot_time = now
+        # Publish frame snapshot if motion or person detected
+        if (motion_detected or person_detected) and frame is not None:
             ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
             if ret:
                 self.client.publish(f"hass_xt/{self.device_name}/snapshot", jpeg.tobytes())
