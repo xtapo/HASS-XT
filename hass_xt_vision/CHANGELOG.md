@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1] - 2026-06-30
+
+### Fixed
+- Gửi ảnh chụp snapshot định kỳ mỗi 2 giây/lần lên thực thể camera trong Home Assistant (giúp thực thể camera luôn hiển thị ảnh xem trước trực tiếp thay vì bị trống khi chưa phát hiện chuyển động).
+
+---
+
 ## [1.2.0] - 2026-06-29
 
 ### Added

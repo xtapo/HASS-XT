@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from app.config import config, save_config
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 
 class ConfigUpdateModel(BaseModel):
     rtsp_url: str
